@@ -11,16 +11,41 @@ import type { ParseHtmlInput, ParseHtmlResult } from './contentWorker.js'
 // Always reference .js — tsx resolves .js → .ts transparently during development;
 // compiled .js files exist in dist/ for production. Resolves at the build layer
 // rather than with a runtime branch.
+// JSDOM allocates 3-4 instances per parse, so the worker heap budget needs
+// headroom for heavy pages (Reuters, Medium-class sites with large inline
+// scripts). 256MB caused silent worker OOMs and forced articles to fall
+// back to the much shorter RSS excerpt. 512MB is still constrained but
+// realistic for typical content extraction.
 const pool = new PiscinaPool({
   filename: new URL('./contentWorker.js', import.meta.url).href,
-  execArgv: [...process.execArgv, '--max-old-space-size=256'],
+  execArgv: [...process.execArgv, '--max-old-space-size=512'],
   maxThreads: Number(process.env.PARSE_MAX_THREADS) || 2,
-  minThreads: 0,
+  // Keep at least one warm worker. minThreads: 0 forced a cold spawn for the
+  // first task in every sparse batch; the spawn-plus-parse latency could
+  // approach the per-task timeout under load.
+  minThreads: 1,
   idleTimeout: 30_000,
 })
 
 /** Per-task timeout for worker pool. */
 const WORKER_TIMEOUT_MS = 45_000
+
+/**
+ * Run a worker task with a cancellable timeout. Unlike AbortSignal.timeout(),
+ * the underlying timer is cleared once the task settles, so the abort listener
+ * never fires after the promise resolves. Without this, Piscina's internal
+ * abort cleanup occasionally produced unhandled-rejection noise long after
+ * the batch had completed.
+ */
+async function runWithTimeout(input: ParseHtmlInput, timeoutMs: number): Promise<ParseHtmlResult> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(new Error('Worker timeout')), timeoutMs)
+  try {
+    return await pool.run(input, { signal: controller.signal })
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
 
 /**
  * Minimum character count for extracted article text to be considered valid.
@@ -139,7 +164,7 @@ export async function fetchFullText(articleUrl: string, options?: FetchFullTextO
 
   // Step 2: Parse HTML in worker thread (CPU-intensive, off main thread)
   const input: ParseHtmlInput = { html: cleanedHtml, articleUrl, cleanerConfig }
-  const result: ParseHtmlResult = await pool.run(input, { signal: AbortSignal.timeout(WORKER_TIMEOUT_MS) })
+  const result = await runWithTimeout(input, WORKER_TIMEOUT_MS)
 
   // Step 3: FlareSolverr fallback if extracted text is too short or looks like garbage
   const extractedLen = result.fullText.replace(/\s+/g, ' ').trim().length
@@ -151,7 +176,7 @@ export async function fetchFullText(articleUrl: string, options?: FetchFullTextO
     if (flare) {
       const flareHtml = stripHeavyTags(extractAnchoredContentHtml(flare.body, articleUrl))
       const flareInput: ParseHtmlInput = { html: flareHtml, articleUrl, cleanerConfig }
-      const flareResult: ParseHtmlResult = await pool.run(flareInput, { signal: AbortSignal.timeout(WORKER_TIMEOUT_MS) })
+      const flareResult = await runWithTimeout(flareInput, WORKER_TIMEOUT_MS)
       const flareLen = flareResult.fullText.replace(/\s+/g, ' ').trim().length
       if (flareLen > extractedLen) {
         return flareResult
