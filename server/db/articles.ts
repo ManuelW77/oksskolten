@@ -495,7 +495,11 @@ export function getExistingArticleUrls(urls: string[]): Set<string> {
 
   // Query both protocol variants so a feed item that arrives as https://
   // is treated as duplicate when we already stored it as http://, and
-  // vice versa.
+  // vice versa. This is an intentional design trade-off: sites that serve
+  // genuinely different content at http:// vs https:// (extremely rare for
+  // RSS feeds) would lose the http version. The alternative — strict
+  // per-protocol dedup — causes duplicate articles when the same blog is
+  // referenced under both protocols in different feeds.
   const expanded = new Set<string>()
   for (const u of normalized) {
     expanded.add(u)
