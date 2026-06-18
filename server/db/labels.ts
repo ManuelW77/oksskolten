@@ -57,7 +57,7 @@ export function deleteLabel(id: number): boolean {
 
 export function getArticlesByLabel(
   labelId: number,
-  opts: { limit: number; offset: number },
+  opts: { limit: number; offset: number; unreadOnly?: boolean },
 ): { items: import('./types.js').ArticleListItem[]; total: number } {
   const label = getLabelById(labelId)
   if (!label) return { items: [], total: 0 }
@@ -72,20 +72,25 @@ export function getArticlesByLabel(
     ? [label.match_text, label.match_text]
     : [label.match_text]
 
+  const unreadClause = opts.unreadOnly ? ' AND a.seen_at IS NULL' : ''
+
   const total = (getDb().prepare(
-    `SELECT COUNT(*) AS n FROM active_articles a WHERE ${matchExpr}`,
+    `SELECT COUNT(*) AS n FROM active_articles a WHERE ${matchExpr}${unreadClause}`,
   ).get(...matchArgs) as { n: number }).n
 
-  const items = getDb().prepare(`
+  // Fetch limit+1 so the caller can determine has_more without relying on total
+  const itemsWithExtra = getDb().prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, a.title, a.url,
            a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
            a.seen_at, a.read_at, a.bookmarked_at, a.liked_at, a.score
     FROM active_articles a
     JOIN feeds f ON f.id = a.feed_id
-    WHERE ${matchExpr}
+    WHERE ${matchExpr}${unreadClause}
     ORDER BY a.published_at DESC
     LIMIT ? OFFSET ?
-  `).all(...matchArgs, opts.limit, opts.offset) as import('./types.js').ArticleListItem[]
+  `).all(...matchArgs, opts.limit + 1, opts.offset) as import('./types.js').ArticleListItem[]
+
+  const items = itemsWithExtra.length > opts.limit ? itemsWithExtra.slice(0, opts.limit) : itemsWithExtra
 
   return { items, total }
 }

@@ -5,6 +5,8 @@ import { useI18n } from '../../../lib/i18n'
 import { fetcher, apiPost, apiPatch, apiDelete } from '../../../lib/fetcher'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { RadioGroup } from '@/components/ui/radio-group'
+import { useAppLayout } from '../../../app'
 import type { LabelWithCount } from '../../../../shared/types'
 
 type MatchField = 'title' | 'full_text' | 'both'
@@ -25,6 +27,7 @@ function matchFieldLabel(field: MatchField, t: ReturnType<typeof useI18n>['t']):
 
 export function LabelsSection() {
   const { t } = useI18n()
+  const { settings } = useAppLayout()
   const { mutate: globalMutate } = useSWRConfig()
   const { data, mutate } = useSWR<{ labels: LabelWithCount[] }>('/api/labels', fetcher)
   const labels = data?.labels ?? []
@@ -79,6 +82,19 @@ export function LabelsSection() {
     <section>
       <h2 className="text-base font-semibold text-text mb-1">{t('settings.labels')}</h2>
       <p className="text-xs text-muted mb-4">{t('settings.labelsDesc')}</p>
+
+      <div className="mb-5">
+        <p className="text-sm text-text mb-2">{t('settings.labelUnreadOnly')}</p>
+        <RadioGroup
+          name="labelUnreadOnly"
+          options={[
+            { value: 'on' as const, label: 'ON' },
+            { value: 'off' as const, label: 'OFF' },
+          ]}
+          value={settings.labelUnreadOnly}
+          onChange={(val) => settings.setLabelUnreadOnly(val as 'on' | 'off')}
+        />
+      </div>
 
       <div className="space-y-2">
         {labels.length === 0 && !showAdd && (

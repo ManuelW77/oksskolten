@@ -70,7 +70,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const bookmarkedOnly = isBookmarks
   const likedOnly = isLikes
   const readOnly = isHistory
-  const { autoMarkRead, dateMode, indicatorStyle, layout, articleOpenMode, keyboardNavigation, keybindings } = settings
+  const { autoMarkRead, dateMode, indicatorStyle, layout, articleOpenMode, keyboardNavigation, keybindings, labelUnreadOnly } = settings
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null)
   const [noFloor, setNoFloor] = useState(false)
   const displayConfig: ArticleDisplayConfig = useMemo(() => ({
@@ -87,6 +87,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     if (previousPageData && !previousPageData.has_more) return null
     if (isLabel && labelId) {
       const params = new URLSearchParams()
+      if (labelUnreadOnly === 'on') params.set('unread', '1')
       params.set('limit', String(PAGE_SIZE))
       params.set('offset', String(pageIndex * PAGE_SIZE))
       return `/api/labels/${labelId}/articles?${params.toString()}`
