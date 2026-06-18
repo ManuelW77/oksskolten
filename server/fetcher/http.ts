@@ -105,7 +105,7 @@ export async function fetchHtml(url: string, opts?: {
   if (!res.ok) {
     // Only invoke FlareSolverr for responses that look like Cloudflare challenges.
     // 404/500/etc. won't be resolved by a browser session — avoid the Chromium overhead.
-    const isCloudflareBlock = res.status === 403 || res.status === 503 || res.headers.has('cf-ray')
+    const isCloudflareBlock = res.status === 403 || res.status === 503 || (res.headers?.has('cf-ray') ?? false)
     if (!isCloudflareBlock) throw new Error(`HTTP ${res.status}`)
     const flare = await fetchViaFlareSolverr(url)
     if (!flare) throw new Error(`HTTP ${res.status}`)
