@@ -77,7 +77,10 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
   const { progress, startFeedFetch, subscribeFeedFetch } = useFetchProgressContext()
   const { data: feedsData, mutate: mutateFeeds } = useSWR<{ feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; clip_feed_id: number | null }>('/api/feeds', fetcher)
   const { data: categoriesData, mutate: mutateCategories } = useSWR<{ categories: Category[] }>('/api/categories', fetcher)
-  const { data: labelsData } = useSWR<{ labels: LabelWithCount[] }>('/api/labels', fetcher)
+  const { settings } = useAppLayout()
+  const labelUnreadOnly = settings.labelUnreadOnly === 'on'
+  const labelsUrl = labelUnreadOnly ? '/api/labels?unread=1' : '/api/labels'
+  const { data: labelsData } = useSWR<{ labels: LabelWithCount[] }>(labelsUrl, fetcher)
   const labels = labelsData?.labels ?? []
   const [labelsCollapsed, setLabelsCollapsed] = useState(false)
   const feeds = useMemo(() => feedsData?.feeds ?? [], [feedsData])
@@ -213,7 +216,6 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
     },
   })
 
-  const { settings } = useAppLayout()
   const showFeedActivity = settings.showFeedActivity
 
   const totalUnread = feeds.reduce((sum, f) => sum + (f.disabled || f.type === 'clip' ? 0 : f.unread_count), 0)

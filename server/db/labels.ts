@@ -1,7 +1,8 @@
 import { getDb, runNamed } from './connection.js'
 import type { Label, LabelWithCount } from '../../shared/types.js'
 
-export function getLabels(): LabelWithCount[] {
+export function getLabels(opts: { unreadOnly?: boolean } = {}): LabelWithCount[] {
+  const unreadClause = opts.unreadOnly ? ' AND a.seen_at IS NULL' : ''
   return getDb().prepare(`
     SELECT l.*,
       (SELECT COUNT(*) FROM active_articles a
@@ -10,7 +11,7 @@ export function getLabels(): LabelWithCount[] {
          WHEN 'full_text' THEN a.full_text LIKE '%' || l.match_text || '%'
          ELSE a.title LIKE '%' || l.match_text || '%'
               OR a.full_text LIKE '%' || l.match_text || '%'
-       END
+       END${unreadClause}
       ) AS article_count
     FROM labels l
     ORDER BY l.sort_order ASC, l.name COLLATE NOCASE ASC
