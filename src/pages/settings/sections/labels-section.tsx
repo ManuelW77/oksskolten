@@ -10,19 +10,35 @@ import { useAppLayout } from '../../../app'
 import type { LabelWithCount } from '../../../../shared/types'
 
 type MatchField = 'title' | 'full_text' | 'both'
+type RuleType = 'and' | 'or' | 'not'
+
+interface RuleForm {
+  match_text: string
+  match_field: MatchField
+  rule_type: RuleType
+}
 
 interface LabelForm {
   name: string
-  match_text: string
-  match_field: MatchField
+  auto_summarize: boolean
+  rules: RuleForm[]
 }
 
-const EMPTY_FORM: LabelForm = { name: '', match_text: '', match_field: 'both' }
+const EMPTY_RULE: RuleForm = { match_text: '', match_field: 'both', rule_type: 'or' }
+const EMPTY_FORM: LabelForm = { name: '', auto_summarize: false, rules: [{ ...EMPTY_RULE }] }
 
 function matchFieldLabel(field: MatchField, t: ReturnType<typeof useI18n>['t']): string {
   if (field === 'title') return t('settings.labelMatchFieldTitle')
   if (field === 'full_text') return t('settings.labelMatchFieldFullText')
   return t('settings.labelMatchFieldBoth')
+}
+
+
+function labelToForm(label: LabelWithCount): LabelForm {
+  const rules: RuleForm[] = label.rules.length > 0
+    ? label.rules.map(r => ({ match_text: r.match_text, match_field: r.match_field, rule_type: r.rule_type }))
+    : [{ match_text: label.match_text, match_field: label.match_field, rule_type: 'or' as const }]
+  return { name: label.name, auto_summarize: label.auto_summarize === 1, rules }
 }
 
 export function LabelsSection() {
@@ -44,7 +60,7 @@ export function LabelsSection() {
 
   const handleStartEdit = useCallback((label: LabelWithCount) => {
     setEditingId(label.id)
-    setForm({ name: label.name, match_text: label.match_text, match_field: label.match_field })
+    setForm(labelToForm(label))
     setShowAdd(false)
   }, [])
 
@@ -54,7 +70,7 @@ export function LabelsSection() {
   }, [])
 
   const handleSaveEdit = useCallback(async () => {
-    if (!editingId || !form.name.trim() || !form.match_text.trim()) return
+    if (!editingId || !form.name.trim() || form.rules.some(r => !r.match_text.trim())) return
     await apiPatch(`/api/labels/${editingId}`, form)
     setEditingId(null)
     setForm(EMPTY_FORM)
@@ -62,7 +78,7 @@ export function LabelsSection() {
   }, [editingId, form, revalidate])
 
   const handleCreate = useCallback(async () => {
-    if (!form.name.trim() || !form.match_text.trim()) return
+    if (!form.name.trim() || form.rules.some(r => !r.match_text.trim())) return
     await apiPost('/api/labels', form)
     setForm(EMPTY_FORM)
     setShowAdd(false)
@@ -111,38 +127,12 @@ export function LabelsSection() {
               onCancel={handleCancelEdit}
             />
           ) : (
-            <div
+            <LabelRow
               key={label.id}
-              className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-border bg-bg-card"
-            >
-              <div className="min-w-0">
-                <span className="text-sm font-medium text-text">{label.name}</span>
-                <span className="ml-2 text-xs text-muted">
-                  {label.match_text}
-                  {' · '}
-                  {matchFieldLabel(label.match_field, t)}
-                </span>
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="text-xs text-muted tabular-nums">{label.article_count}</span>
-                <button
-                  type="button"
-                  onClick={() => handleStartEdit(label)}
-                  className="text-muted hover:text-text transition-colors"
-                  aria-label={t('settings.editLabel')}
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteId(label.id)}
-                  className="text-muted hover:text-error transition-colors"
-                  aria-label={t('feeds.delete')}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
+              label={label}
+              onEdit={handleStartEdit}
+              onDelete={setDeleteId}
+            />
           ),
         )}
 
@@ -181,6 +171,59 @@ export function LabelsSection() {
   )
 }
 
+interface LabelRowProps {
+  label: LabelWithCount
+  onEdit: (label: LabelWithCount) => void
+  onDelete: (id: number) => void
+}
+
+function LabelRow({ label, onEdit, onDelete }: LabelRowProps) {
+  const { t } = useI18n()
+  const rules = label.rules.length > 0
+    ? label.rules
+    : [{ match_text: label.match_text, match_field: label.match_field, rule_type: 'or' as const }]
+
+  return (
+    <div className="flex items-start justify-between gap-2 px-3 py-2 rounded-lg border border-border bg-bg-card">
+      <div className="min-w-0 flex-1">
+        <span className="text-sm font-medium text-text">{label.name}</span>
+        {label.auto_summarize === 1 && (
+          <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-accent/10 text-accent">AI</span>
+        )}
+        <div className="mt-0.5 space-y-0.5">
+          {rules.map((r, i) => (
+            <span key={i} className="block text-xs text-muted">
+              <span className="font-mono uppercase text-[10px] mr-1 opacity-60">{r.rule_type}</span>
+              {r.match_text}
+              {' · '}
+              {matchFieldLabel(r.match_field, t)}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-3 shrink-0 pt-0.5">
+        <span className="text-xs text-muted tabular-nums">{label.article_count}</span>
+        <button
+          type="button"
+          onClick={() => onEdit(label)}
+          className="text-muted hover:text-text transition-colors"
+          aria-label={t('settings.editLabel')}
+        >
+          <Pencil size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={() => onDelete(label.id)}
+          className="text-muted hover:text-error transition-colors"
+          aria-label={t('feeds.delete')}
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 interface LabelFormRowProps {
   form: LabelForm
   onChange: (f: LabelForm) => void
@@ -190,7 +233,19 @@ interface LabelFormRowProps {
 
 function LabelFormRow({ form, onChange, onSave, onCancel }: LabelFormRowProps) {
   const { t } = useI18n()
-  const canSave = form.name.trim().length > 0 && form.match_text.trim().length > 0
+  const canSave = form.name.trim().length > 0 && form.rules.length > 0 && form.rules.every(r => r.match_text.trim().length > 0)
+
+  const updateRule = (i: number, patch: Partial<RuleForm>) => {
+    const rules = form.rules.map((r, idx) => idx === i ? { ...r, ...patch } : r)
+    onChange({ ...form, rules })
+  }
+
+  const addRule = () => onChange({ ...form, rules: [...form.rules, { ...EMPTY_RULE }] })
+
+  const removeRule = (i: number) => {
+    if (form.rules.length <= 1) return
+    onChange({ ...form, rules: form.rules.filter((_, idx) => idx !== i) })
+  }
 
   return (
     <div className="flex flex-col gap-2 p-3 rounded-lg border border-accent bg-bg-card">
@@ -201,27 +256,79 @@ function LabelFormRow({ form, onChange, onSave, onCancel }: LabelFormRowProps) {
         onChange={(e) => onChange({ ...form, name: e.target.value })}
         className="w-full px-2 py-1 text-sm rounded-lg border border-border bg-bg text-text placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-accent"
       />
-      <input
-        type="text"
-        placeholder={t('settings.labelMatchText')}
-        value={form.match_text}
-        onChange={(e) => onChange({ ...form, match_text: e.target.value })}
-        className="w-full px-2 py-1 text-sm rounded-lg border border-border bg-bg text-text placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-accent"
-      />
-      <div className="flex items-center gap-2">
-        <Select
-          value={form.match_field}
-          onValueChange={(v) => onChange({ ...form, match_field: v as MatchField })}
-        >
-          <SelectTrigger className="h-8 text-xs flex-1">
-            <SelectValue>{matchFieldLabel(form.match_field, t)}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="both">{t('settings.labelMatchFieldBoth')}</SelectItem>
-            <SelectItem value="title">{t('settings.labelMatchFieldTitle')}</SelectItem>
-            <SelectItem value="full_text">{t('settings.labelMatchFieldFullText')}</SelectItem>
-          </SelectContent>
-        </Select>
+
+      <div className="space-y-2">
+        {form.rules.map((rule, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <Select
+              value={rule.rule_type}
+              onValueChange={(v) => updateRule(i, { rule_type: v as RuleType })}
+            >
+              <SelectTrigger className="h-7 text-xs w-28 shrink-0">
+                <SelectValue>
+                  <span className="font-mono uppercase">{rule.rule_type}</span>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="or">{t('settings.labelRuleTypeOr')}</SelectItem>
+                <SelectItem value="and">{t('settings.labelRuleTypeAnd')}</SelectItem>
+                <SelectItem value="not">{t('settings.labelRuleTypeNot')}</SelectItem>
+              </SelectContent>
+            </Select>
+            <input
+              type="text"
+              placeholder={t('settings.labelMatchText')}
+              value={rule.match_text}
+              onChange={(e) => updateRule(i, { match_text: e.target.value })}
+              className="flex-1 px-2 py-1 text-xs rounded-lg border border-border bg-bg text-text placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <Select
+              value={rule.match_field}
+              onValueChange={(v) => updateRule(i, { match_field: v as MatchField })}
+            >
+              <SelectTrigger className="h-7 text-xs w-28 shrink-0">
+                <SelectValue>{matchFieldLabel(rule.match_field, t)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="both">{t('settings.labelMatchFieldBoth')}</SelectItem>
+                <SelectItem value="title">{t('settings.labelMatchFieldTitle')}</SelectItem>
+                <SelectItem value="full_text">{t('settings.labelMatchFieldFullText')}</SelectItem>
+              </SelectContent>
+            </Select>
+            {form.rules.length > 1 && (
+              <button
+                type="button"
+                onClick={() => removeRule(i)}
+                className="p-1 text-muted hover:text-error transition-colors shrink-0"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={addRule}
+        className="self-start inline-flex items-center gap-1 text-xs text-accent hover:opacity-80 transition-opacity"
+      >
+        <Plus size={12} />
+        {t('settings.labelAddRule')}
+      </button>
+
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={form.auto_summarize}
+          onChange={(e) => onChange({ ...form, auto_summarize: e.target.checked })}
+          className="rounded accent-accent"
+        />
+        <span className="text-xs text-text">{t('settings.labelAutoSummarize')}</span>
+        <span className="text-xs text-muted">— {t('settings.labelAutoSummarizeDesc')}</span>
+      </label>
+
+      <div className="flex items-center gap-2 self-end">
         <button
           type="button"
           onClick={onSave}

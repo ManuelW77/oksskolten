@@ -5,18 +5,25 @@ import { requireJson } from '../auth.js'
 import { NumericIdParams, parseOrBadRequest } from '../lib/validation.js'
 
 const MatchField = z.enum(['title', 'full_text', 'both'])
+const RuleType = z.enum(['and', 'or', 'not'])
+
+const LabelRule = z.object({
+  match_text: z.string().trim().min(1),
+  match_field: MatchField.default('both'),
+  rule_type: RuleType.default('or'),
+})
 
 const CreateLabelBody = z.object({
   name: z.string({ error: 'name is required' }).trim().min(1, 'name is required'),
-  match_text: z.string({ error: 'match_text is required' }).trim().min(1, 'match_text is required'),
-  match_field: MatchField.default('both'),
+  auto_summarize: z.boolean().default(false),
+  rules: z.array(LabelRule).min(1, 'at least one rule is required'),
 })
 
 const UpdateLabelBody = z.object({
   name: z.string().trim().min(1).optional(),
-  match_text: z.string().trim().min(1).optional(),
-  match_field: MatchField.optional(),
   sort_order: z.number().int().optional(),
+  auto_summarize: z.boolean().optional(),
+  rules: z.array(LabelRule).min(1).optional(),
 })
 
 const LabelArticlesQuery = z.object({
