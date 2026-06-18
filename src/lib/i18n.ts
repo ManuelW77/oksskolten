@@ -353,6 +353,14 @@ const dict = {
   'settings.translateTargetLangDesc': { ja: '記事をどの言語に翻訳するか', en: 'Language to translate articles into', de: 'Sprache, in die Artikel übersetzt werden' },
   'settings.translateTargetLangAuto': { ja: 'UI言語と同じ', en: 'Same as UI language', de: 'Wie UI-Sprache' },
 
+  // AI Prompts
+  'settings.aiPrompts': { ja: 'AIプロンプト', en: 'AI Prompts', de: 'KI-Prompts' },
+  'settings.aiPromptsDesc': { ja: '要約・翻訳で使用するプロンプトをカスタマイズします。{{article}} を記事本文のプレースホルダーとして使用してください。空欄の場合はデフォルトのプロンプトを使用します。', en: 'Customize the prompts used for summarization and translation. Use {{article}} as a placeholder for the article content. Leave empty to use the built-in default.', de: 'Passe die Prompts für Zusammenfassung und Übersetzung an. Verwende {{article}} als Platzhalter für den Artikelinhalt. Leer lassen, um den eingebauten Standard zu verwenden.' },
+  'settings.summarizePrompt': { ja: '要約プロンプト', en: 'Summarize prompt', de: 'Zusammenfassungs-Prompt' },
+  'settings.translatePrompt': { ja: '翻訳プロンプト', en: 'Translate prompt', de: 'Übersetzungs-Prompt' },
+  'settings.promptReset': { ja: 'デフォルトに戻す', en: 'Reset to default', de: 'Auf Standard zurücksetzen' },
+  'settings.promptSaved': { ja: '保存しました', en: 'Saved', de: 'Gespeichert' },
+
   // Data (OPML)
   'settings.data': { ja: 'データ', en: 'Data', de: 'Daten' },
   'settings.importExport': { ja: 'フィード移行', en: 'Feed Migration', de: 'Feed-Migration' },
