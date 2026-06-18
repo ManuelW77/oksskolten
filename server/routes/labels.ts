@@ -38,6 +38,17 @@ export async function labelRoutes(api: FastifyInstance): Promise<void> {
     reply.send({ labels: getLabels({ unreadOnly }) })
   })
 
+  api.get('/api/labels/:id', async (request, reply) => {
+    const params = parseOrBadRequest(NumericIdParams, request.params, reply)
+    if (!params) return
+    const label = getLabelById(params.id)
+    if (!label) {
+      reply.status(404).send({ error: 'Label not found' })
+      return
+    }
+    reply.send(label)
+  })
+
   api.post(
     '/api/labels',
     { preHandler: [requireJson] },
@@ -96,7 +107,7 @@ export async function labelRoutes(api: FastifyInstance): Promise<void> {
       reply.send({
         articles: result.items,
         total: result.total,
-        has_more: result.items.length > query.limit,
+        has_more: query.offset + result.items.length < result.total,
       })
     },
   )

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import useSWR from 'swr'
 import { fetcher, apiPatch } from '../../../lib/fetcher'
 import { useI18n } from '../../../lib/i18n'
@@ -30,12 +30,23 @@ function PromptEditor({
   const [saved, setSaved] = useState(false)
   const [dirty, setDirty] = useState(false)
   // Show saved custom prompt, or default as editable starting point
-  const [local, setLocal] = useState(savedValue ?? defaultValue)
+  const [local, setLocal] = useState(savedValue || defaultValue)
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+  }, [])
 
   useEffect(() => {
-    setLocal(savedValue ?? defaultValue)
+    setLocal(savedValue || defaultValue)
     setDirty(false)
   }, [savedValue, defaultValue])
+
+  function flashSaved() {
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    setSaved(true)
+    savedTimerRef.current = setTimeout(() => setSaved(false), 2000)
+  }
 
   function handleChange(val: string) {
     setLocal(val)
@@ -44,20 +55,26 @@ function PromptEditor({
   }
 
   async function handleSave() {
-    await apiPatch('/api/settings/preferences', { [prefKey]: local })
-    onChange(prefKey, local)
-    setDirty(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    try {
+      await apiPatch('/api/settings/preferences', { [prefKey]: local })
+      onChange(prefKey, local)
+      setDirty(false)
+      flashSaved()
+    } catch {
+      // keep dirty state so user can retry
+    }
   }
 
   async function handleReset() {
-    await apiPatch('/api/settings/preferences', { [prefKey]: '' })
-    onChange(prefKey, null)
-    setLocal(defaultValue)
-    setDirty(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    try {
+      await apiPatch('/api/settings/preferences', { [prefKey]: '' })
+      onChange(prefKey, null)
+      setLocal(defaultValue)
+      setDirty(false)
+      flashSaved()
+    } catch {
+      // keep state unchanged so user can retry
+    }
   }
 
   const isCustomized = savedValue !== null && savedValue !== ''
@@ -129,7 +146,7 @@ export function PromptsSection() {
     void mutate(prev => prev ? { ...prev, [key]: val } : prev, false)
   }, [mutate])
 
-  if (!defaultsData) return null
+  if (!defaultsData?.summarize || !defaultsData?.translate) return null
 
   return (
     <section className="space-y-6">

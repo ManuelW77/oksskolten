@@ -45,7 +45,7 @@ export function LabelsSection() {
   const { t } = useI18n()
   const { settings } = useAppLayout()
   const { mutate: globalMutate } = useSWRConfig()
-  const { data, mutate } = useSWR<{ labels: LabelWithCount[] }>('/api/labels', fetcher)
+  const { data } = useSWR<{ labels: LabelWithCount[] }>('/api/labels', fetcher)
   const labels = data?.labels ?? []
 
   const [form, setForm] = useState<LabelForm>(EMPTY_FORM)
@@ -54,9 +54,8 @@ export function LabelsSection() {
   const [showAdd, setShowAdd] = useState(false)
 
   const revalidate = useCallback(() => {
-    void mutate()
-    void globalMutate('/api/labels')
-  }, [mutate, globalMutate])
+    void globalMutate((key: unknown) => typeof key === 'string' && key.startsWith('/api/labels'))
+  }, [globalMutate])
 
   const handleStartEdit = useCallback((label: LabelWithCount) => {
     setEditingId(label.id)
@@ -104,8 +103,8 @@ export function LabelsSection() {
         <RadioGroup
           name="labelUnreadOnly"
           options={[
-            { value: 'on' as const, label: 'ON' },
-            { value: 'off' as const, label: 'OFF' },
+            { value: 'on' as const, label: t('common.on') },
+            { value: 'off' as const, label: t('common.off') },
           ]}
           value={settings.labelUnreadOnly}
           onChange={(val) => settings.setLabelUnreadOnly(val as 'on' | 'off')}
@@ -159,7 +158,7 @@ export function LabelsSection() {
 
       {deletingLabel && (
         <ConfirmDialog
-          title={t('settings.editLabel')}
+          title={t('feeds.delete')}
           message={t('settings.labelDeleteConfirm', { name: deletingLabel.name })}
           danger
           confirmLabel={t('feeds.delete')}
@@ -265,14 +264,12 @@ function LabelFormRow({ form, onChange, onSave, onCancel }: LabelFormRowProps) {
               onValueChange={(v) => updateRule(i, { rule_type: v as RuleType })}
             >
               <SelectTrigger className="h-7 text-xs w-28 shrink-0">
-                <SelectValue>
-                  <span className="font-mono uppercase">{rule.rule_type}</span>
-                </SelectValue>
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="or">{t('settings.labelRuleTypeOr')}</SelectItem>
-                <SelectItem value="and">{t('settings.labelRuleTypeAnd')}</SelectItem>
-                <SelectItem value="not">{t('settings.labelRuleTypeNot')}</SelectItem>
+                <SelectItem value="or" textValue="OR">{t('settings.labelRuleTypeOr')}</SelectItem>
+                <SelectItem value="and" textValue="AND">{t('settings.labelRuleTypeAnd')}</SelectItem>
+                <SelectItem value="not" textValue="NOT">{t('settings.labelRuleTypeNot')}</SelectItem>
               </SelectContent>
             </Select>
             <input
@@ -287,7 +284,7 @@ function LabelFormRow({ form, onChange, onSave, onCancel }: LabelFormRowProps) {
               onValueChange={(v) => updateRule(i, { match_field: v as MatchField })}
             >
               <SelectTrigger className="h-7 text-xs w-28 shrink-0">
-                <SelectValue>{matchFieldLabel(rule.match_field, t)}</SelectValue>
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="both">{t('settings.labelMatchFieldBoth')}</SelectItem>

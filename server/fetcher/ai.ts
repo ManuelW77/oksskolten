@@ -50,7 +50,7 @@ Preserve Markdown formatting. In particular, keep blockquote lines starting with
 {{article}}`
 
 function applyArticle(template: string, fullText: string): string {
-  return template.replace('{{article}}', fullText)
+  return template.split('{{article}}').join(fullText)
 }
 
 function buildSummarizePrompt(fullText: string): string {

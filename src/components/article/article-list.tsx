@@ -358,7 +358,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
           if (el.dataset.articleUnread !== '1') continue
 
           const rootTop = entry.rootBounds?.top ?? 0
-          if (entry.boundingClientRect.top < rootTop) {
+          if (!entry.isIntersecting && entry.boundingClientRect.top < rootTop) {
             markReadRef.current(articleId)
           }
         }

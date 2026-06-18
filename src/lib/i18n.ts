@@ -475,6 +475,10 @@ const dict = {
   // ConfirmDialog
   'confirm.cancel': { ja: 'キャンセル', en: 'Cancel', de: 'Abbrechen' },
 
+  // Common toggle labels
+  'common.on': { ja: 'ON', en: 'ON', de: 'EIN' },
+  'common.off': { ja: 'OFF', en: 'OFF', de: 'AUS' },
+
   // Setup
   'setup.title': { ja: '初期設定', en: 'Initial Setup', de: 'Ersteinrichtung' },
   'setup.subtitle': { ja: 'アカウントを作成して始めましょう', en: 'Create your account to get started', de: 'Erstelle dein Konto, um loszulegen' },

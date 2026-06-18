@@ -84,7 +84,7 @@ function AppLayout() {
       }
     } else if (profile && profile.language !== cached) {
       // Client and server are out of sync — push client locale to server
-      void apiPatch('/api/settings/profile', { language: cached })
+      void apiPatch('/api/settings/profile', { language: cached }).catch(() => {})
     }
   }, [profile, setLocale, langFromUrl])
 
@@ -142,7 +142,7 @@ function ArticleListPage() {
   const isClips = location.pathname === '/clips'
   const { data: feedsData } = useSWR<{ feeds: Array<{ id: number; name: string; type: string; category_id: number | null; category_name: string | null }>; clip_feed_id: number | null }>('/api/feeds', fetcher)
   const { data: categoriesData } = useSWR<{ categories: Array<{ id: number; name: string }> }>('/api/categories', fetcher)
-  const { data: labelsData } = useSWR<{ labels: Array<{ id: number; name: string }> }>(labelId ? '/api/labels' : null, fetcher)
+  const { data: labelData } = useSWR<{ id: number; name: string }>(labelId ? `/api/labels/${labelId}` : null, fetcher)
 
   const headerName = isHistory
     ? t('feeds.history')
@@ -159,7 +159,7 @@ function ArticleListPage() {
           : categoryId
             ? categoriesData?.categories.find(c => c.id === Number(categoryId))?.name ?? null
             : labelId
-              ? labelsData?.labels.find(l => l.id === Number(labelId))?.name ?? null
+              ? labelData?.name ?? null
               : null
 
   const articleListRef = useRef<ArticleListHandle>(null)

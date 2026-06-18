@@ -200,8 +200,13 @@ export function getArticlesByLabel(
   return { items, total }
 }
 
-/** Returns article IDs matching any label with auto_summarize=1 that have no summary yet */
+/** Returns true if the article matches any label with auto_summarize=1 and has no summary yet. */
 export function getAutoSummarizeCandidates(articleId: number): boolean {
+  const alreadySummarized = getDb().prepare(
+    'SELECT 1 FROM articles WHERE id = ? AND summary IS NOT NULL AND summary != \'\'',
+  ).get(articleId)
+  if (alreadySummarized) return false
+
   const autoLabels = getDb().prepare(
     'SELECT * FROM labels WHERE auto_summarize = 1',
   ).all() as Omit<Label, 'rules'>[]
