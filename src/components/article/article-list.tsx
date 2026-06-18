@@ -427,7 +427,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   }, [feedId, categoryId, setFocusedItemId])
 
   return (
-    <main ref={listRef} className="max-w-2xl mx-auto" role={!isGridLayout ? 'listbox' : undefined}>
+    <main ref={listRef} className={categoryId ?? labelId ? undefined : 'max-w-2xl mx-auto'} role={!isGridLayout ? 'listbox' : undefined}>
       {isTouchDevice && <PullToRefresh onRefresh={async () => {
         if (feedId) {
           const result = await startFeedFetch(feedId)
