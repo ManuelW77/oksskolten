@@ -294,7 +294,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     batchQueue.current.clear()
     markSeenOnServer(ids)
       .then(() => globalMutate(
-        (key: string) => typeof key === 'string' && key.startsWith('/api/feeds'),
+        (key: string) => typeof key === 'string' && (key.startsWith('/api/feeds') || key.startsWith('/api/labels')),
       ))
       .catch(() => {})
   }, [globalMutate])
