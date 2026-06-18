@@ -151,12 +151,10 @@ export function updateLabel(
 
   if (data.rules !== undefined) {
     replaceRules(id, data.rules)
-    // Sync legacy columns
+    // Sync legacy columns — clear when no or-rules remain so stale values don't mislead old clients
     const firstOr = data.rules.find(r => r.rule_type === 'or')
-    if (firstOr) {
-      getDb().prepare('UPDATE labels SET match_text = ?, match_field = ? WHERE id = ?')
-        .run(firstOr.match_text, firstOr.match_field, id)
-    }
+    getDb().prepare('UPDATE labels SET match_text = ?, match_field = ? WHERE id = ?')
+      .run(firstOr?.match_text ?? null, firstOr?.match_field ?? null, id)
   }
 
   return getLabelById(id)

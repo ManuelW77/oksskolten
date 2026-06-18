@@ -69,26 +69,38 @@ export function LabelsSection() {
   }, [])
 
   const handleSaveEdit = useCallback(async () => {
-    if (!editingId || !form.name.trim() || form.rules.some(r => !r.match_text.trim())) return
-    await apiPatch(`/api/labels/${editingId}`, form)
-    setEditingId(null)
-    setForm(EMPTY_FORM)
-    revalidate()
+    if (editingId === null || !form.name.trim() || form.rules.some(r => !r.match_text.trim())) return
+    try {
+      await apiPatch(`/api/labels/${editingId}`, form)
+      setEditingId(null)
+      setForm(EMPTY_FORM)
+      revalidate()
+    } catch {
+      // keep edit state so the user can retry
+    }
   }, [editingId, form, revalidate])
 
   const handleCreate = useCallback(async () => {
     if (!form.name.trim() || form.rules.some(r => !r.match_text.trim())) return
-    await apiPost('/api/labels', form)
-    setForm(EMPTY_FORM)
-    setShowAdd(false)
-    revalidate()
+    try {
+      await apiPost('/api/labels', form)
+      setForm(EMPTY_FORM)
+      setShowAdd(false)
+      revalidate()
+    } catch {
+      // keep form state so the user can retry
+    }
   }, [form, revalidate])
 
   const handleDelete = useCallback(async () => {
     if (deleteId === null) return
-    await apiDelete(`/api/labels/${deleteId}`)
-    setDeleteId(null)
-    revalidate()
+    try {
+      await apiDelete(`/api/labels/${deleteId}`)
+      setDeleteId(null)
+      revalidate()
+    } catch {
+      // keep dialog open so the user can retry
+    }
   }, [deleteId, revalidate])
 
   const deletingLabel = deleteId !== null ? labels.find(l => l.id === deleteId) : null
