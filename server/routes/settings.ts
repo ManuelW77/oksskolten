@@ -15,6 +15,8 @@ import { extractByDotPath } from '../fetcher/article-images.js'
 import { getMonthlyUsage } from '../providers/translate/google-translate.js'
 import { getDeeplMonthlyUsage } from '../providers/translate/deepl.js'
 import { parseOrBadRequest } from '../lib/validation.js'
+import { AI_DEFAULT_PROMPTS } from '../fetcher/ai.js'
+import { DEFAULT_LANGUAGE } from '../../shared/lang.js'
 
 const ProfileBody = z.object({
   account_name: z.string().optional(),
@@ -604,6 +606,15 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
 
   api.get('/api/settings/deepl/usage', async (_request, reply) => {
     reply.send(getDeeplMonthlyUsage())
+  })
+
+  api.get('/api/settings/prompts/defaults', async (_request, reply) => {
+    const summarizeLang = getSetting('general.language') || DEFAULT_LANGUAGE
+    const translateLang = getSetting('translate.target_lang') || getSetting('general.language') || DEFAULT_LANGUAGE
+    reply.send({
+      summarize: AI_DEFAULT_PROMPTS.summarize(summarizeLang),
+      translate: AI_DEFAULT_PROMPTS.translate(translateLang),
+    })
   })
 
   // --- Ollama endpoints ---

@@ -360,6 +360,7 @@ const dict = {
   'settings.translatePrompt': { ja: '翻訳プロンプト', en: 'Translate prompt', de: 'Übersetzungs-Prompt' },
   'settings.promptReset': { ja: 'デフォルトに戻す', en: 'Reset to default', de: 'Auf Standard zurücksetzen' },
   'settings.promptSaved': { ja: '保存しました', en: 'Saved', de: 'Gespeichert' },
+  'settings.promptCustomized': { ja: 'カスタム', en: 'Custom', de: 'Angepasst' },
 
   // Data (OPML)
   'settings.data': { ja: 'データ', en: 'Data', de: 'Daten' },

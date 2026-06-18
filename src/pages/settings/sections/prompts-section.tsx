@@ -8,25 +8,34 @@ interface PromptsPrefs {
   'prompt.translate': string | null
 }
 
+interface DefaultPrompts {
+  summarize: string
+  translate: string
+}
+
 function PromptEditor({
   label,
   prefKey,
-  placeholder,
-  value,
+  savedValue,
+  defaultValue,
   onChange,
 }: {
   label: string
   prefKey: 'prompt.summarize' | 'prompt.translate'
-  placeholder: string
-  value: string
-  onChange: (key: 'prompt.summarize' | 'prompt.translate', val: string) => void
+  savedValue: string | null
+  defaultValue: string
+  onChange: (key: 'prompt.summarize' | 'prompt.translate', val: string | null) => void
 }) {
   const { t } = useI18n()
   const [saved, setSaved] = useState(false)
   const [dirty, setDirty] = useState(false)
-  const [local, setLocal] = useState(value)
+  // Show saved custom prompt, or default as editable starting point
+  const [local, setLocal] = useState(savedValue ?? defaultValue)
 
-  useEffect(() => { setLocal(value) }, [value])
+  useEffect(() => {
+    setLocal(savedValue ?? defaultValue)
+    setDirty(false)
+  }, [savedValue, defaultValue])
 
   function handleChange(val: string) {
     setLocal(val)
@@ -44,20 +53,29 @@ function PromptEditor({
 
   async function handleReset() {
     await apiPatch('/api/settings/preferences', { [prefKey]: '' })
-    onChange(prefKey, '')
-    setLocal('')
+    onChange(prefKey, null)
+    setLocal(defaultValue)
     setDirty(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
+  const isCustomized = savedValue !== null && savedValue !== ''
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-text">{label}</label>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-text">{label}</label>
+          {isCustomized && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium">
+              {t('settings.promptCustomized')}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {saved && <span className="text-xs text-accent">{t('settings.promptSaved')}</span>}
-          {local && (
+          {isCustomized && (
             <button
               type="button"
               onClick={() => void handleReset()}
@@ -79,9 +97,8 @@ function PromptEditor({
       <textarea
         value={local}
         onChange={e => handleChange(e.target.value)}
-        placeholder={placeholder}
-        rows={10}
-        className="w-full text-xs font-mono rounded-md border border-border bg-bg-subtle text-text placeholder:text-muted/50 px-3 py-2 resize-y focus:outline-none focus:ring-1 focus:ring-accent"
+        rows={12}
+        className="w-full text-xs font-mono rounded-md border border-border bg-bg-subtle text-text px-3 py-2 resize-y focus:outline-none focus:ring-1 focus:ring-accent"
       />
     </div>
   )
@@ -89,46 +106,30 @@ function PromptEditor({
 
 export function PromptsSection() {
   const { t } = useI18n()
-  const { data, mutate } = useSWR<PromptsPrefs>('/api/settings/preferences', fetcher, {
+  const { data: prefsData, mutate } = useSWR<PromptsPrefs>('/api/settings/preferences', fetcher, {
+    revalidateOnFocus: false,
+  })
+  const { data: defaultsData } = useSWR<DefaultPrompts>('/api/settings/prompts/defaults', fetcher, {
     revalidateOnFocus: false,
   })
 
   const [prefs, setPrefs] = useState<PromptsPrefs>({ 'prompt.summarize': null, 'prompt.translate': null })
 
   useEffect(() => {
-    if (data) {
+    if (prefsData) {
       setPrefs({
-        'prompt.summarize': data['prompt.summarize'] ?? null,
-        'prompt.translate': data['prompt.translate'] ?? null,
+        'prompt.summarize': prefsData['prompt.summarize'] ?? null,
+        'prompt.translate': prefsData['prompt.translate'] ?? null,
       })
     }
-  }, [data])
+  }, [prefsData])
 
-  const handleChange = useCallback((key: 'prompt.summarize' | 'prompt.translate', val: string) => {
-    setPrefs(prev => ({ ...prev, [key]: val || null }))
-    void mutate(prev => prev ? { ...prev, [key]: val || null } : prev, false)
+  const handleChange = useCallback((key: 'prompt.summarize' | 'prompt.translate', val: string | null) => {
+    setPrefs(prev => ({ ...prev, [key]: val }))
+    void mutate(prev => prev ? { ...prev, [key]: val } : prev, false)
   }, [mutate])
 
-  const summarizePlaceholder = `Summarize the following article in German. Follow the format strictly.
-
-## Format
-Line 1: A concise 1-2 sentence summary...
-Line 2: Empty line
-Line 3+: Key points as bullet points: "**Title** — explanation"
-
-## Rules
-- Output in Markdown (bullet points start with "- ")
-- Do not include any text other than the summary
-
---- Article body ---
-{{article}}`
-
-  const translatePlaceholder = `Translate the following article into German.
-Translate every word faithfully — do not summarize or omit anything.
-Preserve Markdown formatting.
-
---- Article body ---
-{{article}}`
+  if (!defaultsData) return null
 
   return (
     <section className="space-y-6">
@@ -140,16 +141,16 @@ Preserve Markdown formatting.
       <PromptEditor
         label={t('settings.summarizePrompt')}
         prefKey="prompt.summarize"
-        placeholder={summarizePlaceholder}
-        value={prefs['prompt.summarize'] ?? ''}
+        savedValue={prefs['prompt.summarize']}
+        defaultValue={defaultsData.summarize}
         onChange={handleChange}
       />
 
       <PromptEditor
         label={t('settings.translatePrompt')}
         prefKey="prompt.translate"
-        placeholder={translatePlaceholder}
-        value={prefs['prompt.translate'] ?? ''}
+        savedValue={prefs['prompt.translate']}
+        defaultValue={defaultsData.translate}
         onChange={handleChange}
       />
     </section>
