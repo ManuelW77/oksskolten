@@ -22,6 +22,7 @@ const UpdateLabelBody = z.object({
 const LabelArticlesQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
+  unread: z.string().optional(),
 })
 
 export async function labelRoutes(api: FastifyInstance): Promise<void> {
@@ -82,11 +83,12 @@ export async function labelRoutes(api: FastifyInstance): Promise<void> {
       }
       const query = parseOrBadRequest(LabelArticlesQuery, request.query, reply)
       if (!query) return
-      const result = getArticlesByLabel(params.id, { limit: query.limit, offset: query.offset })
+      const unreadOnly = query.unread === '1'
+      const result = getArticlesByLabel(params.id, { limit: query.limit, offset: query.offset, unreadOnly })
       reply.send({
         articles: result.items,
         total: result.total,
-        has_more: result.items.length + query.offset < result.total,
+        has_more: result.items.length > query.limit,
       })
     },
   )
