@@ -104,7 +104,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     return `/api/articles?${params.toString()}`
   }
 
-  const { data, error, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite<ArticlesResponse>(
+  const { data, error, setSize, isLoading, isValidating, mutate } = useSWRInfinite<ArticlesResponse>(
     getKey,
     fetcher,
     {
@@ -236,7 +236,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const loadMoreRef = useRef(() => {})
   loadMoreRef.current = () => {
     if (hasMore && !isValidating) {
-      void setSize(size + 1)
+      void setSize(prev => prev + 1)
     }
   }
 
@@ -282,6 +282,11 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const batchQueue = useRef(new Set<number>())
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Track current isValidating in a ref so scheduleFlush can read it without
+  // becoming a dependency (which would recreate the callback on every fetch).
+  const isValidatingRef = useRef(isValidating)
+  isValidatingRef.current = isValidating
+
   const flushBatch = useCallback(() => {
     if (batchQueue.current.size === 0) return
     const ids = [...batchQueue.current]
@@ -297,6 +302,13 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     if (flushTimerRef.current) return
     flushTimerRef.current = setTimeout(() => {
       flushTimerRef.current = null
+      // Defer the flush if a pagination fetch is in flight to avoid the race
+      // where batch-seen shrinks the server total while the next page is being
+      // requested, causing has_more to go false prematurely.
+      if (isValidatingRef.current) {
+        scheduleFlush()
+        return
+      }
       flushBatch()
     }, BATCH_FLUSH_INTERVAL)
   }, [flushBatch])
