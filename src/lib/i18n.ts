@@ -837,6 +837,25 @@ const dict = {
   'search.period.week': { ja: '1週間', en: 'Week', de: '1 Woche' },
   'search.period.month': { ja: '1ヶ月', en: 'Month', de: '1 Monat' },
 
+  // Labels
+  'settings.labels': { ja: 'ラベル', en: 'Labels', de: 'Labels' },
+  'settings.labelsDesc': { ja: 'キーワードでArticleをフィルタリングするラベルを作成します', en: 'Create labels to filter articles by keyword', de: 'Labels erstellen, um Artikel nach Schlüsselwort zu filtern' },
+  'settings.labelsEmpty': { ja: 'ラベルがありません', en: 'No labels yet', de: 'Noch keine Labels' },
+  'settings.labelName': { ja: 'ラベル名', en: 'Label name', de: 'Label-Name' },
+  'settings.labelMatchText': { ja: 'キーワードまたはフレーズ', en: 'Keyword or phrase', de: 'Schlüsselwort oder Phrase' },
+  'settings.labelMatchField': { ja: 'マッチ対象', en: 'Match in', de: 'Suchen in' },
+  'settings.labelMatchFieldTitle': { ja: 'タイトルのみ', en: 'Title only', de: 'Nur Titel' },
+  'settings.labelMatchFieldFullText': { ja: '全文のみ', en: 'Full text only', de: 'Nur Volltext' },
+  'settings.labelMatchFieldBoth': { ja: 'タイトルと全文', en: 'Title and full text', de: 'Titel und Volltext' },
+  'settings.addLabel': { ja: 'ラベルを追加', en: 'Add label', de: 'Label hinzufügen' },
+  'settings.editLabel': { ja: 'ラベルを編集', en: 'Edit label', de: 'Label bearbeiten' },
+  'settings.labelSaved': { ja: 'ラベルを保存しました', en: 'Label saved', de: 'Label gespeichert' },
+  'settings.labelDeleted': { ja: 'ラベルを削除しました', en: 'Label deleted', de: 'Label gelöscht' },
+  'settings.labelDeleteConfirm': { ja: '「${name}」を削除しますか？', en: 'Delete label "${name}"?', de: 'Label „${name}" löschen?' },
+
+  // Sidebar labels
+  'feeds.labels': { ja: 'ラベル', en: 'Labels', de: 'Labels' },
+
   // About
   'settings.about': { ja: 'About', en: 'About', de: 'Über' },
   'about.version': { ja: 'バージョン', en: 'Version', de: 'Version' },

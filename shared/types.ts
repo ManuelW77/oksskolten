@@ -87,3 +87,16 @@ export interface ArticleDetail extends ArticleListItem {
   feed_type: 'rss' | 'clip'
   imageArchivingEnabled: boolean
 }
+
+export interface Label {
+  id: number
+  name: string
+  match_text: string
+  match_field: 'title' | 'full_text' | 'both'
+  sort_order: number
+  created_at: string
+}
+
+export interface LabelWithCount extends Label {
+  article_count: number
+}
