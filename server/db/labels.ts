@@ -1,54 +1,165 @@
 import { getDb, runNamed } from './connection.js'
-import type { Label, LabelWithCount } from '../../shared/types.js'
+import type { ArticleListItem, Label, LabelRule, LabelWithCount } from '../../shared/types.js'
+
+// ---------------------------------------------------------------------------
+// Rule-based WHERE clause builder
+// ---------------------------------------------------------------------------
+
+type MatchExpr = { clause: string; args: string[] }
+
+function buildFieldMatch(text: string, field: string, alias: string): MatchExpr {
+  if (field === 'title') {
+    return { clause: `${alias}.title LIKE '%' || ? || '%'`, args: [text] }
+  }
+  if (field === 'full_text') {
+    return { clause: `${alias}.full_text LIKE '%' || ? || '%'`, args: [text] }
+  }
+  return {
+    clause: `(${alias}.title LIKE '%' || ? || '%' OR ${alias}.full_text LIKE '%' || ? || '%')`,
+    args: [text, text],
+  }
+}
+
+export function buildRulesWhere(rules: LabelRule[], alias = 'a'): MatchExpr {
+  const orExprs: MatchExpr[] = []
+  const andExprs: MatchExpr[] = []
+  const notExprs: MatchExpr[] = []
+
+  for (const rule of rules) {
+    const expr = buildFieldMatch(rule.match_text, rule.match_field, alias)
+    if (rule.rule_type === 'or') orExprs.push(expr)
+    else if (rule.rule_type === 'and') andExprs.push(expr)
+    else notExprs.push(expr)
+  }
+
+  if (orExprs.length === 0 && andExprs.length === 0 && notExprs.length === 0) {
+    return { clause: '0=1', args: [] }
+  }
+
+  const parts: string[] = []
+  const args: string[] = []
+
+  if (orExprs.length > 0) {
+    parts.push(`(${orExprs.map(e => e.clause).join(' OR ')})`)
+    for (const e of orExprs) args.push(...e.args)
+  }
+  for (const e of andExprs) { parts.push(e.clause); args.push(...e.args) }
+  for (const e of notExprs) { parts.push(`NOT ${e.clause}`); args.push(...e.args) }
+
+  return { clause: parts.join(' AND '), args }
+}
+
+// ---------------------------------------------------------------------------
+// Rule helpers
+// ---------------------------------------------------------------------------
+
+function getLabelRules(labelId: number): LabelRule[] {
+  return getDb().prepare(
+    'SELECT * FROM label_rules WHERE label_id = ? ORDER BY id ASC',
+  ).all(labelId) as LabelRule[]
+}
+
+function replaceRules(
+  labelId: number,
+  rules: Array<{ match_text: string; match_field: 'title' | 'full_text' | 'both'; rule_type: 'and' | 'or' | 'not' }>,
+): void {
+  const db = getDb()
+  db.prepare('DELETE FROM label_rules WHERE label_id = ?').run(labelId)
+  const insert = db.prepare(
+    'INSERT INTO label_rules (label_id, match_text, match_field, rule_type) VALUES (?, ?, ?, ?)',
+  )
+  for (const r of rules) {
+    insert.run(labelId, r.match_text, r.match_field, r.rule_type)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Label CRUD
+// ---------------------------------------------------------------------------
 
 export function getLabels(opts: { unreadOnly?: boolean } = {}): LabelWithCount[] {
+  const rows = getDb().prepare(
+    'SELECT * FROM labels ORDER BY sort_order ASC, name COLLATE NOCASE ASC',
+  ).all() as Label[]
+
   const unreadClause = opts.unreadOnly ? ' AND a.seen_at IS NULL' : ''
-  return getDb().prepare(`
-    SELECT l.*,
-      (SELECT COUNT(*) FROM active_articles a
-       WHERE CASE l.match_field
-         WHEN 'title'     THEN a.title LIKE '%' || l.match_text || '%'
-         WHEN 'full_text' THEN a.full_text LIKE '%' || l.match_text || '%'
-         ELSE a.title LIKE '%' || l.match_text || '%'
-              OR a.full_text LIKE '%' || l.match_text || '%'
-       END${unreadClause}
-      ) AS article_count
-    FROM labels l
-    ORDER BY l.sort_order ASC, l.name COLLATE NOCASE ASC
-  `).all() as LabelWithCount[]
+
+  return rows.map(label => {
+    const rules = getLabelRules(label.id)
+    const { clause, args } = buildRulesWhere(rules)
+    const count = (getDb().prepare(
+      `SELECT COUNT(*) AS n FROM active_articles a WHERE (${clause})${unreadClause}`,
+    ).get(...args) as { n: number }).n
+    return { ...label, rules, article_count: count }
+  })
 }
 
 export function getLabelById(id: number): Label | undefined {
-  return getDb().prepare('SELECT * FROM labels WHERE id = ?').get(id) as Label | undefined
+  const row = getDb().prepare('SELECT * FROM labels WHERE id = ?').get(id) as Label | undefined
+  if (!row) return undefined
+  return { ...row, rules: getLabelRules(id) }
 }
 
-export function createLabel(data: { name: string; match_text: string; match_field: 'title' | 'full_text' | 'both' }): Label {
-  const maxOrder = getDb().prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM labels').get() as { next: number }
+export function createLabel(data: {
+  name: string
+  auto_summarize?: boolean
+  rules: Array<{ match_text: string; match_field: 'title' | 'full_text' | 'both'; rule_type: 'and' | 'or' | 'not' }>
+}): Label {
+  const maxOrder = getDb().prepare(
+    'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM labels',
+  ).get() as { next: number }
+
+  // Legacy columns: store first OR rule text for backward compat; empty otherwise
+  const firstOr = data.rules.find(r => r.rule_type === 'or')
+  const legacyText = firstOr?.match_text ?? ''
+  const legacyField = firstOr?.match_field ?? 'both'
+
   const info = getDb().prepare(
-    'INSERT INTO labels (name, match_text, match_field, sort_order) VALUES (?, ?, ?, ?)',
-  ).run(data.name, data.match_text, data.match_field, maxOrder.next)
-  return getDb().prepare('SELECT * FROM labels WHERE id = ?').get(info.lastInsertRowid) as Label
+    'INSERT INTO labels (name, match_text, match_field, sort_order, auto_summarize) VALUES (?, ?, ?, ?, ?)',
+  ).run(data.name, legacyText, legacyField, maxOrder.next, data.auto_summarize ? 1 : 0)
+
+  const id = Number(info.lastInsertRowid)
+  replaceRules(id, data.rules)
+
+  return getLabelById(id)!
 }
 
 export function updateLabel(
   id: number,
-  data: { name?: string; match_text?: string; match_field?: 'title' | 'full_text' | 'both'; sort_order?: number },
+  data: {
+    name?: string
+    sort_order?: number
+    auto_summarize?: boolean
+    rules?: Array<{ match_text: string; match_field: 'title' | 'full_text' | 'both'; rule_type: 'and' | 'or' | 'not' }>
+  },
 ): Label | undefined {
-  const label = getLabelById(id)
-  if (!label) return undefined
+  if (!getLabelById(id)) return undefined
 
   const fields: string[] = []
   const params: Record<string, unknown> = { id }
 
   if (data.name !== undefined) { fields.push('name = @name'); params.name = data.name }
-  if (data.match_text !== undefined) { fields.push('match_text = @match_text'); params.match_text = data.match_text }
-  if (data.match_field !== undefined) { fields.push('match_field = @match_field'); params.match_field = data.match_field }
   if (data.sort_order !== undefined) { fields.push('sort_order = @sort_order'); params.sort_order = data.sort_order }
+  if (data.auto_summarize !== undefined) {
+    fields.push('auto_summarize = @auto_summarize')
+    params.auto_summarize = data.auto_summarize ? 1 : 0
+  }
 
-  if (fields.length === 0) return label
+  if (fields.length > 0) {
+    runNamed(`UPDATE labels SET ${fields.join(', ')} WHERE id = @id`, params)
+  }
 
-  runNamed(`UPDATE labels SET ${fields.join(', ')} WHERE id = @id`, params)
-  return getDb().prepare('SELECT * FROM labels WHERE id = ?').get(id) as Label
+  if (data.rules !== undefined) {
+    replaceRules(id, data.rules)
+    // Sync legacy columns
+    const firstOr = data.rules.find(r => r.rule_type === 'or')
+    if (firstOr) {
+      getDb().prepare('UPDATE labels SET match_text = ?, match_field = ? WHERE id = ?')
+        .run(firstOr.match_text, firstOr.match_field, id)
+    }
+  }
+
+  return getLabelById(id)
 }
 
 export function deleteLabel(id: number): boolean {
@@ -56,42 +167,53 @@ export function deleteLabel(id: number): boolean {
   return result.changes > 0
 }
 
+// ---------------------------------------------------------------------------
+// Article queries
+// ---------------------------------------------------------------------------
+
 export function getArticlesByLabel(
   labelId: number,
   opts: { limit: number; offset: number; unreadOnly?: boolean },
-): { items: import('./types.js').ArticleListItem[]; total: number } {
+): { items: ArticleListItem[]; total: number } {
   const label = getLabelById(labelId)
   if (!label) return { items: [], total: 0 }
 
-  const matchExpr = label.match_field === 'title'
-    ? `a.title LIKE '%' || ? || '%'`
-    : label.match_field === 'full_text'
-      ? `a.full_text LIKE '%' || ? || '%'`
-      : `(a.title LIKE '%' || ? || '%' OR a.full_text LIKE '%' || ? || '%')`
-
-  const matchArgs = label.match_field === 'both'
-    ? [label.match_text, label.match_text]
-    : [label.match_text]
-
+  const { clause, args } = buildRulesWhere(label.rules)
   const unreadClause = opts.unreadOnly ? ' AND a.seen_at IS NULL' : ''
 
   const total = (getDb().prepare(
-    `SELECT COUNT(*) AS n FROM active_articles a WHERE ${matchExpr}${unreadClause}`,
-  ).get(...matchArgs) as { n: number }).n
+    `SELECT COUNT(*) AS n FROM active_articles a WHERE (${clause})${unreadClause}`,
+  ).get(...args) as { n: number }).n
 
-  // Fetch limit+1 so the caller can determine has_more without relying on total
   const itemsWithExtra = getDb().prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, a.title, a.url,
            a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
            a.seen_at, a.read_at, a.bookmarked_at, a.liked_at, a.score
     FROM active_articles a
     JOIN feeds f ON f.id = a.feed_id
-    WHERE ${matchExpr}${unreadClause}
+    WHERE (${clause})${unreadClause}
     ORDER BY a.published_at DESC
     LIMIT ? OFFSET ?
-  `).all(...matchArgs, opts.limit + 1, opts.offset) as import('./types.js').ArticleListItem[]
+  `).all(...args, opts.limit + 1, opts.offset) as ArticleListItem[]
 
   const items = itemsWithExtra.length > opts.limit ? itemsWithExtra.slice(0, opts.limit) : itemsWithExtra
-
   return { items, total }
+}
+
+/** Returns article IDs matching any label with auto_summarize=1 that have no summary yet */
+export function getAutoSummarizeCandidates(articleId: number): boolean {
+  const autoLabels = getDb().prepare(
+    'SELECT * FROM labels WHERE auto_summarize = 1',
+  ).all() as Omit<Label, 'rules'>[]
+
+  for (const row of autoLabels) {
+    const rules = getLabelRules(row.id)
+    if (rules.length === 0) continue
+    const { clause, args } = buildRulesWhere(rules)
+    const match = getDb().prepare(
+      `SELECT 1 FROM active_articles a WHERE a.id = ? AND (${clause})`,
+    ).get(articleId, ...args) as Record<string, unknown> | undefined
+    if (match) return true
+  }
+  return false
 }

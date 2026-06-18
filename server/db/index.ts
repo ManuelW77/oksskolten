@@ -10,4 +10,4 @@ export { createApiKey, listApiKeys, deleteApiKey, validateApiKey } from './apiKe
 export type { ApiKey, ApiKeyCreated } from './apiKeys.js'
 export { insertSimilarity, getSimilarArticles, findReadSimilarArticle } from './similarities.js'
 export type { SimilarArticle } from './similarities.js'
-export { getLabels, getLabelById, createLabel, updateLabel, deleteLabel, getArticlesByLabel } from './labels.js'
+export { getLabels, getLabelById, createLabel, updateLabel, deleteLabel, getArticlesByLabel, getAutoSummarizeCandidates, buildRulesWhere } from './labels.js'

@@ -88,6 +88,14 @@ export interface ArticleDetail extends ArticleListItem {
   imageArchivingEnabled: boolean
 }
 
+export interface LabelRule {
+  id: number
+  label_id: number
+  match_text: string
+  match_field: 'title' | 'full_text' | 'both'
+  rule_type: 'and' | 'or' | 'not'
+}
+
 export interface Label {
   id: number
   name: string
@@ -95,6 +103,8 @@ export interface Label {
   match_field: 'title' | 'full_text' | 'both'
   sort_order: number
   created_at: string
+  auto_summarize: number
+  rules: LabelRule[]
 }
 
 export interface LabelWithCount extends Label {

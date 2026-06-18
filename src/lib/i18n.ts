@@ -853,6 +853,12 @@ const dict = {
   'settings.labelSaved': { ja: 'ラベルを保存しました', en: 'Label saved', de: 'Label gespeichert' },
   'settings.labelDeleted': { ja: 'ラベルを削除しました', en: 'Label deleted', de: 'Label gelöscht' },
   'settings.labelDeleteConfirm': { ja: '「${name}」を削除しますか？', en: 'Delete label "${name}"?', de: 'Label „${name}" löschen?' },
+  'settings.labelAddRule': { ja: 'ルールを追加', en: 'Add rule', de: 'Regel hinzufügen' },
+  'settings.labelRuleTypeOr': { ja: 'OR (いずれかに一致)', en: 'OR (match any)', de: 'ODER (mindestens eins)' },
+  'settings.labelRuleTypeAnd': { ja: 'AND (必須一致)', en: 'AND (must match)', de: 'UND (muss enthalten)' },
+  'settings.labelRuleTypeNot': { ja: 'NOT (除外)', en: 'NOT (exclude)', de: 'NICHT (ausschließen)' },
+  'settings.labelAutoSummarize': { ja: '自動要約', en: 'Auto-summarize', de: 'Automatisch zusammenfassen' },
+  'settings.labelAutoSummarizeDesc': { ja: 'このラベルに一致する記事のAI要約を自動生成します', en: 'Automatically generate an AI summary for articles matching this label', de: 'KI-Zusammenfassung für Artikel mit diesem Label automatisch erstellen' },
 
   // Sidebar labels
   'feeds.labels': { ja: 'ラベル', en: 'Labels', de: 'Labels' },
