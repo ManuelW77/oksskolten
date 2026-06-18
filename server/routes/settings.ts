@@ -56,6 +56,8 @@ const PREF_KEYS = [
   'retention.enabled',
   'retention.read_days',
   'retention.unread_days',
+  'prompt.summarize',
+  'prompt.translate',
 ] as const
 type PrefKey = typeof PREF_KEYS[number]
 
@@ -90,6 +92,8 @@ const PREF_ALLOWED: Record<PrefKey, string[] | null> = {
   'retention.enabled': ['on', 'off'],
   'retention.read_days': null,
   'retention.unread_days': null,
+  'prompt.summarize': null,
+  'prompt.translate': null,
 }
 
 const PROVIDER_MODEL_PAIRS: Array<{ providerKey: PrefKey; modelKey: PrefKey }> = [
