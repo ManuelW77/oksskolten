@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, laz
 import { AnimatePresence, motion } from 'framer-motion'
 import useSWR, { SWRConfig } from 'swr'
 import { useSettings, type Settings } from './hooks/use-settings'
-import { fetcher } from './lib/fetcher'
+import { fetcher, apiPatch } from './lib/fetcher'
 import { LocaleContext, APP_NAME, type Locale, useI18n } from './lib/i18n'
 import { MD_BREAKPOINT } from './lib/breakpoints'
 import { useIsTouchDevice } from './hooks/use-is-touch-device'
@@ -72,12 +72,19 @@ function AppLayout() {
       localStorage.setItem('locale', langFromUrl)
       return
     }
-    // Only apply profile language as initial fallback — if localStorage already
-    // has a valid locale the user explicitly chose, respect it.
     const cached = localStorage.getItem('locale')
-    if (cached === 'ja' || cached === 'en' || cached === 'de') return
-    if (profile?.language === 'ja' || profile?.language === 'en' || profile?.language === 'de') {
-      setLocale(profile.language as Locale)
+    const validLocales = ['ja', 'en', 'de'] as const
+    type ValidLocale = typeof validLocales[number]
+    const isValid = (v: string | null): v is ValidLocale => validLocales.includes(v as ValidLocale)
+
+    if (!isValid(cached)) {
+      // No valid client locale — apply server value as fallback
+      if (isValid(profile?.language ?? null)) {
+        setLocale(profile!.language as Locale)
+      }
+    } else if (profile && profile.language !== cached) {
+      // Client and server are out of sync — push client locale to server
+      void apiPatch('/api/settings/profile', { language: cached })
     }
   }, [profile, setLocale, langFromUrl])
 
