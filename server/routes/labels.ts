@@ -26,8 +26,9 @@ const LabelArticlesQuery = z.object({
 })
 
 export async function labelRoutes(api: FastifyInstance): Promise<void> {
-  api.get('/api/labels', async (_request, reply) => {
-    reply.send({ labels: getLabels() })
+  api.get('/api/labels', async (request, reply) => {
+    const unreadOnly = (request.query as Record<string, string>).unread === '1'
+    reply.send({ labels: getLabels({ unreadOnly }) })
   })
 
   api.post(
