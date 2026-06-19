@@ -283,10 +283,12 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const batchQueue = useRef(new Set<number>())
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Track current isValidating in a ref so scheduleFlush can read it without
-  // becoming a dependency (which would recreate the callback on every fetch).
+  // Track current isValidating and hasMore in refs so scheduleFlush can read
+  // them without becoming a dependency (which would recreate the callback).
   const isValidatingRef = useRef(isValidating)
   isValidatingRef.current = isValidating
+  const hasMoreRef = useRef(hasMore)
+  hasMoreRef.current = hasMore
 
   const flushBatch = useCallback(() => {
     if (batchQueue.current.size === 0) return
@@ -303,10 +305,10 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     if (flushTimerRef.current) return
     flushTimerRef.current = setTimeout(() => {
       flushTimerRef.current = null
-      // Defer the flush if a pagination fetch is in flight to avoid the race
-      // where batch-seen shrinks the server total while the next page is being
-      // requested, causing has_more to go false prematurely.
-      if (isValidatingRef.current) {
+      // Defer the flush while a fetch is in flight OR more pages remain.
+      // Flushing between page fetches shrinks the server's unread total,
+      // causing has_more to go false prematurely on the next request.
+      if (isValidatingRef.current || hasMoreRef.current) {
         scheduleFlush()
         return
       }

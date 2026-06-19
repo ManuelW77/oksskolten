@@ -172,9 +172,9 @@ export function deleteLabel(id: number): boolean {
 export function getArticlesByLabel(
   labelId: number,
   opts: { limit: number; offset: number; unreadOnly?: boolean },
-): { items: ArticleListItem[]; total: number } {
+): { items: ArticleListItem[]; total: number; hasMore: boolean } {
   const label = getLabelById(labelId)
-  if (!label) return { items: [], total: 0 }
+  if (!label) return { items: [], total: 0, hasMore: false }
 
   const { clause, args } = buildRulesWhere(label.rules)
   const unreadClause = opts.unreadOnly ? ' AND a.seen_at IS NULL' : ''
@@ -194,8 +194,9 @@ export function getArticlesByLabel(
     LIMIT ? OFFSET ?
   `).all(...args, opts.limit + 1, opts.offset) as ArticleListItem[]
 
-  const items = itemsWithExtra.length > opts.limit ? itemsWithExtra.slice(0, opts.limit) : itemsWithExtra
-  return { items, total }
+  const hasMore = itemsWithExtra.length > opts.limit
+  const items = hasMore ? itemsWithExtra.slice(0, opts.limit) : itemsWithExtra
+  return { items, total, hasMore }
 }
 
 /** Returns true if the article matches any label with auto_summarize=1 and has no summary yet. */

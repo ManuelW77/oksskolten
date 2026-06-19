@@ -107,7 +107,7 @@ export async function labelRoutes(api: FastifyInstance): Promise<void> {
       reply.send({
         articles: result.items,
         total: result.total,
-        has_more: query.offset + result.items.length < result.total,
+        has_more: result.hasMore,
       })
     },
   )
