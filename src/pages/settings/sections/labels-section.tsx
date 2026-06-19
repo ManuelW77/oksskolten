@@ -21,11 +21,12 @@ interface RuleForm {
 interface LabelForm {
   name: string
   auto_summarize: boolean
+  exclusive: boolean
   rules: RuleForm[]
 }
 
 const EMPTY_RULE: RuleForm = { match_text: '', match_field: 'both', rule_type: 'or' }
-const EMPTY_FORM: LabelForm = { name: '', auto_summarize: false, rules: [{ ...EMPTY_RULE }] }
+const EMPTY_FORM: LabelForm = { name: '', auto_summarize: false, exclusive: false, rules: [{ ...EMPTY_RULE }] }
 
 function matchFieldLabel(field: MatchField, t: ReturnType<typeof useI18n>['t']): string {
   if (field === 'title') return t('settings.labelMatchFieldTitle')
@@ -38,7 +39,7 @@ function labelToForm(label: LabelWithCount): LabelForm {
   const rules: RuleForm[] = label.rules.length > 0
     ? label.rules.map(r => ({ match_text: r.match_text, match_field: r.match_field, rule_type: r.rule_type }))
     : [{ match_text: label.match_text, match_field: label.match_field, rule_type: 'or' as const }]
-  return { name: label.name, auto_summarize: label.auto_summarize === 1, rules }
+  return { name: label.name, auto_summarize: label.auto_summarize === 1, exclusive: label.exclusive === 1, rules }
 }
 
 export function LabelsSection() {
@@ -201,6 +202,9 @@ function LabelRow({ label, onEdit, onDelete }: LabelRowProps) {
         {label.auto_summarize === 1 && (
           <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-accent/10 text-accent">AI</span>
         )}
+        {label.exclusive === 1 && (
+          <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded bg-muted/20 text-muted">{t('settings.labelExclusive')}</span>
+        )}
         <div className="mt-0.5 space-y-0.5">
           {rules.map((r, i) => (
             <span key={i} className="block text-xs text-muted">
@@ -335,6 +339,17 @@ function LabelFormRow({ form, onChange, onSave, onCancel }: LabelFormRowProps) {
         />
         <span className="text-xs text-text">{t('settings.labelAutoSummarize')}</span>
         <span className="text-xs text-muted">— {t('settings.labelAutoSummarizeDesc')}</span>
+      </label>
+
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={form.exclusive}
+          onChange={(e) => onChange({ ...form, exclusive: e.target.checked })}
+          className="rounded accent-accent"
+        />
+        <span className="text-xs text-text">{t('settings.labelExclusive')}</span>
+        <span className="text-xs text-muted">— {t('settings.labelExclusiveDesc')}</span>
       </label>
 
       <div className="flex items-center gap-2 self-end">

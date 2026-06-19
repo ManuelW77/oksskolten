@@ -74,6 +74,30 @@ function replaceRules(
 }
 
 // ---------------------------------------------------------------------------
+// Exclusion clause: articles already claimed by higher-priority exclusive labels
+// ---------------------------------------------------------------------------
+
+type LabelWithRules = Label & { rules: LabelRule[] }
+
+/**
+ * Build a NOT IN clause that excludes articles matched by any exclusive label
+ * with higher priority (lower sort_order) than the current label.
+ */
+function buildExclusionClause(claimers: LabelWithRules[]): MatchExpr | null {
+  const active = claimers.filter(l => l.rules.length > 0)
+  if (active.length === 0) return null
+
+  const subqueries: string[] = []
+  const args: string[] = []
+  for (const l of active) {
+    const { clause, args: la } = buildRulesWhere(l.rules, 'e')
+    subqueries.push(`SELECT e.id FROM active_articles e WHERE (${clause})`)
+    args.push(...la)
+  }
+  return { clause: `a.id NOT IN (${subqueries.join(' UNION ')})`, args }
+}
+
+// ---------------------------------------------------------------------------
 // Label CRUD
 // ---------------------------------------------------------------------------
 
@@ -84,12 +108,23 @@ export function getLabels(opts: { unreadOnly?: boolean } = {}): LabelWithCount[]
 
   const unreadClause = opts.unreadOnly ? ' AND a.seen_at IS NULL' : ''
 
+  // Pre-compute rules for all exclusive labels once (used for exclusion logic)
+  const exclusiveWithRules: LabelWithRules[] = rows
+    .filter(l => l.exclusive === 1)
+    .map(l => ({ ...l, rules: getLabelRules(l.id) }))
+
   return rows.map(label => {
     const rules = getLabelRules(label.id)
     const { clause, args } = buildRulesWhere(rules)
+
+    const claimers = exclusiveWithRules.filter(l => l.sort_order < label.sort_order)
+    const excl = buildExclusionClause(claimers)
+    const fullClause = excl ? `(${clause}) AND ${excl.clause}` : clause
+    const fullArgs = excl ? [...args, ...excl.args] : args
+
     const count = (getDb().prepare(
-      `SELECT COUNT(*) AS n FROM active_articles a WHERE (${clause})${unreadClause}`,
-    ).get(...args) as { n: number }).n
+      `SELECT COUNT(*) AS n FROM active_articles a WHERE (${fullClause})${unreadClause}`,
+    ).get(...fullArgs) as { n: number }).n
     return { ...label, rules, article_count: count }
   })
 }
@@ -103,6 +138,7 @@ export function getLabelById(id: number): Label | undefined {
 export function createLabel(data: {
   name: string
   auto_summarize?: boolean
+  exclusive?: boolean
   rules: Array<{ match_text: string; match_field: 'title' | 'full_text' | 'both'; rule_type: 'and' | 'or' | 'not' }>
 }): Label {
   const maxOrder = getDb().prepare(
@@ -115,8 +151,8 @@ export function createLabel(data: {
   const legacyField = firstOr?.match_field ?? 'both'
 
   const info = getDb().prepare(
-    'INSERT INTO labels (name, match_text, match_field, sort_order, auto_summarize) VALUES (?, ?, ?, ?, ?)',
-  ).run(data.name, legacyText, legacyField, maxOrder.next, data.auto_summarize ? 1 : 0)
+    'INSERT INTO labels (name, match_text, match_field, sort_order, auto_summarize, exclusive) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(data.name, legacyText, legacyField, maxOrder.next, data.auto_summarize ? 1 : 0, data.exclusive ? 1 : 0)
 
   const id = Number(info.lastInsertRowid)
   replaceRules(id, data.rules)
@@ -130,6 +166,7 @@ export function updateLabel(
     name?: string
     sort_order?: number
     auto_summarize?: boolean
+    exclusive?: boolean
     rules?: Array<{ match_text: string; match_field: 'title' | 'full_text' | 'both'; rule_type: 'and' | 'or' | 'not' }>
   },
 ): Label | undefined {
@@ -143,6 +180,10 @@ export function updateLabel(
   if (data.auto_summarize !== undefined) {
     fields.push('auto_summarize = @auto_summarize')
     params.auto_summarize = data.auto_summarize ? 1 : 0
+  }
+  if (data.exclusive !== undefined) {
+    fields.push('exclusive = @exclusive')
+    params.exclusive = data.exclusive ? 1 : 0
   }
 
   if (fields.length > 0) {
@@ -179,9 +220,17 @@ export function getArticlesByLabel(
   const { clause, args } = buildRulesWhere(label.rules)
   const unreadClause = opts.unreadOnly ? ' AND a.seen_at IS NULL' : ''
 
+  // Exclude articles already claimed by exclusive labels with higher priority
+  const claimers = (getDb().prepare(
+    'SELECT * FROM labels WHERE exclusive = 1 AND sort_order < ?',
+  ).all(label.sort_order) as Label[]).map(l => ({ ...l, rules: getLabelRules(l.id) }))
+  const excl = buildExclusionClause(claimers)
+  const fullClause = excl ? `(${clause}) AND ${excl.clause}` : clause
+  const fullArgs = excl ? [...args, ...excl.args] : args
+
   const total = (getDb().prepare(
-    `SELECT COUNT(*) AS n FROM active_articles a WHERE (${clause})${unreadClause}`,
-  ).get(...args) as { n: number }).n
+    `SELECT COUNT(*) AS n FROM active_articles a WHERE (${fullClause})${unreadClause}`,
+  ).get(...fullArgs) as { n: number }).n
 
   const itemsWithExtra = getDb().prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, a.title, a.url,
@@ -189,10 +238,10 @@ export function getArticlesByLabel(
            a.seen_at, a.read_at, a.bookmarked_at, a.liked_at, a.score
     FROM active_articles a
     JOIN feeds f ON f.id = a.feed_id
-    WHERE (${clause})${unreadClause}
+    WHERE (${fullClause})${unreadClause}
     ORDER BY a.published_at DESC
     LIMIT ? OFFSET ?
-  `).all(...args, opts.limit + 1, opts.offset) as ArticleListItem[]
+  `).all(...fullArgs, opts.limit + 1, opts.offset) as ArticleListItem[]
 
   const hasMore = itemsWithExtra.length > opts.limit
   const items = hasMore ? itemsWithExtra.slice(0, opts.limit) : itemsWithExtra

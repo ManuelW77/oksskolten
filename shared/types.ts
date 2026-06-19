@@ -104,6 +104,7 @@ export interface Label {
   sort_order: number
   created_at: string
   auto_summarize: number
+  exclusive: number
   rules: LabelRule[]
 }
 

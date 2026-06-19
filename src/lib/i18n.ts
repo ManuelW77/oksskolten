@@ -872,6 +872,8 @@ const dict = {
   'settings.labelRuleTypeNot': { ja: 'NOT (除外)', en: 'NOT (exclude)', de: 'NICHT (ausschließen)' },
   'settings.labelAutoSummarize': { ja: '自動要約', en: 'Auto-summarize', de: 'Automatisch zusammenfassen' },
   'settings.labelAutoSummarizeDesc': { ja: 'このラベルに一致する記事のAI要約を自動生成します', en: 'Automatically generate an AI summary for articles matching this label', de: 'KI-Zusammenfassung für Artikel mit diesem Label automatisch erstellen' },
+  'settings.labelExclusive': { ja: '排他的マッチ', en: 'Exclusive match', de: 'Exklusives Matching' },
+  'settings.labelExclusiveDesc': { ja: '一致した記事を他のラベルから除外します（優先順位は並び順で決まります）', en: 'Matched articles are hidden from lower-priority labels (priority follows list order)', de: 'Passende Artikel werden in Labels mit niedrigerer Priorität ausgeblendet (Priorität folgt der Listenreihenfolge)' },
 
   // Sidebar labels
   'feeds.labels': { ja: 'ラベル', en: 'Labels', de: 'Labels' },

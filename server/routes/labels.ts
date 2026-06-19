@@ -16,6 +16,7 @@ const LabelRule = z.object({
 const CreateLabelBody = z.object({
   name: z.string({ error: 'name is required' }).trim().min(1, 'name is required'),
   auto_summarize: z.boolean().default(false),
+  exclusive: z.boolean().default(false),
   rules: z.array(LabelRule).min(1, 'at least one rule is required'),
 })
 
@@ -23,6 +24,7 @@ const UpdateLabelBody = z.object({
   name: z.string().trim().min(1).optional(),
   sort_order: z.number().int().optional(),
   auto_summarize: z.boolean().optional(),
+  exclusive: z.boolean().optional(),
   rules: z.array(LabelRule).min(1).optional(),
 })
 
