@@ -143,12 +143,12 @@ export function getArticles(opts: {
     // Candidates 2+3 in a single query: the Nth-newest article date and the oldest unread date
     const floorRow = getNamed<{ top_floor: string | null; unread_floor: string | null }>(`
       SELECT
-        (SELECT a2.published_at FROM active_articles a2
+        (SELECT a.published_at FROM active_articles a
          ${scopeWhere}
-         ORDER BY a2.published_at DESC
+         ORDER BY a.published_at DESC
          LIMIT 1 OFFSET ${SMART_FLOOR_MIN_ARTICLES - 1}) AS top_floor,
-        (SELECT MIN(a2.published_at) FROM active_articles a2
-         ${unreadAnd} a2.seen_at IS NULL AND a2.published_at IS NOT NULL) AS unread_floor
+        (SELECT MIN(a.published_at) FROM active_articles a
+         ${unreadAnd} a.seen_at IS NULL AND a.published_at IS NOT NULL) AS unread_floor
     `, params)
 
     // If fewer than SMART_FLOOR_MIN_ARTICLES exist, skip the floor entirely — show all
