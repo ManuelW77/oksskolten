@@ -290,14 +290,21 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const hasMoreRef = useRef(hasMore)
   hasMoreRef.current = hasMore
 
+  // Stable ref so flushBatch can call the latest mutate without it becoming a dependency
+  const mutateArticlesRef = useRef(mutate)
+  mutateArticlesRef.current = mutate
+
   const flushBatch = useCallback(() => {
     if (batchQueue.current.size === 0) return
     const ids = [...batchQueue.current]
     batchQueue.current.clear()
     markSeenOnServer(ids)
-      .then(() => globalMutate(
-        (key: string) => typeof key === 'string' && (key.startsWith('/api/feeds') || key.startsWith('/api/labels')),
-      ))
+      .then(() => {
+        void globalMutate(
+          (key: string) => typeof key === 'string' && (key.startsWith('/api/feeds') || key.startsWith('/api/labels')),
+        )
+        void mutateArticlesRef.current()
+      })
       .catch(() => {})
   }, [globalMutate])
 

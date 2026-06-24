@@ -106,7 +106,7 @@ const LikeBody = z.object({ liked: z.boolean({ message: 'liked must be a boolean
 const BatchSeenBody = z.object({
   ids: z.array(z.number()).min(1, 'ids must be a non-empty array').max(MAX_BATCH_SEEN, `Maximum ${MAX_BATCH_SEEN} ids per request`),
 })
-const StreamQuery = z.object({ stream: z.string().optional() })
+const StreamQuery = z.object({ stream: z.string().optional(), force: z.string().optional() })
 const FilenameParams = z.object({ filename: z.string() })
 
 // --- Known error codes that the frontend can i18n-translate ---
@@ -151,8 +151,10 @@ function createAiHandler(config: AiHandlerConfig) {
       return
     }
 
+    const { stream, force } = StreamQuery.parse(request.query)
+
     const cached = config.getCached(article)
-    if (cached) {
+    if (cached && force !== '1') {
       reply.send({ text: cached, cached: true })
       return
     }
@@ -167,8 +169,6 @@ function createAiHandler(config: AiHandlerConfig) {
       reply.status(400).send({ error: validationError })
       return
     }
-
-    const { stream } = StreamQuery.parse(request.query)
 
     try {
       if (stream === '1') {
