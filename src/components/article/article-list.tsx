@@ -298,12 +298,22 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     if (batchQueue.current.size === 0) return
     const ids = [...batchQueue.current]
     batchQueue.current.clear()
+    const idSet = new Set(ids)
+    const now = new Date().toISOString()
     markSeenOnServer(ids)
       .then(() => {
         void globalMutate(
           (key: string) => typeof key === 'string' && (key.startsWith('/api/feeds') || key.startsWith('/api/labels')),
         )
-        void mutateArticlesRef.current()
+        void mutateArticlesRef.current(
+          (pages) => pages?.map(page => ({
+            ...page,
+            articles: page.articles.map(a =>
+              idSet.has(a.id) ? { ...a, seen_at: a.seen_at ?? now } : a
+            ),
+          })),
+          { revalidate: false },
+        )
       })
       .catch(() => {})
   }, [globalMutate])
