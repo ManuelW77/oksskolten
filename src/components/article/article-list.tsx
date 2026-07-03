@@ -109,7 +109,15 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     getKey,
     fetcher,
     {
-      revalidateFirstPage: isCollectionView,
+      // The global SWRConfig disables revalidateIfStale/onMount to avoid
+      // refetching on every navigation. For the article list that caused stale
+      // lists to persist (new articles not appearing until a full page reload),
+      // so opt back in here: on (re)mount, refresh the first page to pull in new
+      // articles. Only page 1 is revalidated (revalidateAll defaults to false),
+      // and revalidateOnFocus stays off, so this stays cheap and non-janky.
+      revalidateFirstPage: true,
+      revalidateOnMount: true,
+      revalidateIfStale: true,
     },
   )
 

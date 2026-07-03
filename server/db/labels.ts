@@ -98,6 +98,87 @@ function buildExclusionClause(claimers: LabelWithRules[]): MatchExpr | null {
 }
 
 // ---------------------------------------------------------------------------
+// Materialized membership (article_labels)
+//
+// Label rule evaluation (LIKE over title + full_text, plus the exclusive-label
+// exclusion) is expensive and unindexable, so we precompute membership into the
+// article_labels join table instead of running it on every request. Membership
+// is a purely per-article property (an article belongs to a label iff it matches
+// the label's rules and is not claimed by a higher-priority exclusive label), so
+// it can be maintained incrementally per article on ingest and rebuilt wholesale
+// when label rules/order/exclusivity change.
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the full match clause for a label (rules + exclusion by higher-priority
+ * exclusive labels). Returns null for a label with no rules (matches nothing).
+ */
+function buildLabelMatchClause(
+  label: Label,
+  rules: LabelRule[],
+  exclusiveWithRules: LabelWithRules[],
+): MatchExpr | null {
+  if (rules.length === 0) return null
+  const { clause, args } = buildRulesWhere(rules)
+  const claimers = exclusiveWithRules.filter(l => l.sort_order < label.sort_order)
+  const excl = buildExclusionClause(claimers)
+  return {
+    clause: excl ? `(${clause}) AND ${excl.clause}` : clause,
+    args: excl ? [...args, ...excl.args] : args,
+  }
+}
+
+function loadLabelsWithExclusive(): { labels: Label[]; exclusiveWithRules: LabelWithRules[] } {
+  const labels = getDb().prepare(
+    'SELECT * FROM labels ORDER BY sort_order ASC',
+  ).all() as Label[]
+  const exclusiveWithRules = labels
+    .filter(l => l.exclusive === 1)
+    .map(l => ({ ...l, rules: getLabelRules(l.id) }))
+  return { labels, exclusiveWithRules }
+}
+
+/** Recompute the label membership of a single article (used on ingest/content change). */
+export function updateArticleLabels(articleId: number): void {
+  const db = getDb()
+  const { labels, exclusiveWithRules } = loadLabelsWithExclusive()
+
+  const matched: number[] = []
+  for (const label of labels) {
+    const match = buildLabelMatchClause(label, getLabelRules(label.id), exclusiveWithRules)
+    if (!match) continue
+    const hit = db.prepare(
+      `SELECT 1 FROM active_articles a WHERE a.id = ? AND (${match.clause}) LIMIT 1`,
+    ).get(articleId, ...match.args)
+    if (hit) matched.push(label.id)
+  }
+
+  db.transaction(() => {
+    db.prepare('DELETE FROM article_labels WHERE article_id = ?').run(articleId)
+    const ins = db.prepare('INSERT OR IGNORE INTO article_labels (article_id, label_id) VALUES (?, ?)')
+    for (const labelId of matched) ins.run(articleId, labelId)
+  })()
+}
+
+/** Rebuild the entire article_labels table from current label rules. */
+export function rebuildAllLabelMemberships(): void {
+  const db = getDb()
+  const { labels, exclusiveWithRules } = loadLabelsWithExclusive()
+
+  db.transaction(() => {
+    db.prepare('DELETE FROM article_labels').run()
+    for (const label of labels) {
+      const match = buildLabelMatchClause(label, getLabelRules(label.id), exclusiveWithRules)
+      if (!match) continue
+      db.prepare(
+        `INSERT OR IGNORE INTO article_labels (article_id, label_id)
+         SELECT a.id, ? FROM active_articles a WHERE (${match.clause})`,
+      ).run(label.id, ...match.args)
+    }
+  })()
+}
+
+// ---------------------------------------------------------------------------
 // Label CRUD
 // ---------------------------------------------------------------------------
 
@@ -106,27 +187,23 @@ export function getLabels(opts: { unreadOnly?: boolean } = {}): LabelWithCount[]
     'SELECT * FROM labels ORDER BY sort_order ASC, name COLLATE NOCASE ASC',
   ).all() as Label[]
 
+  // Counts come from the materialized membership table — one grouped query for
+  // all labels instead of a per-label full-text scan.
   const unreadClause = opts.unreadOnly ? ' AND a.seen_at IS NULL' : ''
+  const countRows = getDb().prepare(`
+    SELECT al.label_id AS label_id, COUNT(*) AS n
+    FROM article_labels al
+    JOIN active_articles a ON a.id = al.article_id
+    WHERE 1=1${unreadClause}
+    GROUP BY al.label_id
+  `).all() as { label_id: number; n: number }[]
+  const countMap = new Map(countRows.map(r => [r.label_id, r.n]))
 
-  // Pre-compute rules for all exclusive labels once (used for exclusion logic)
-  const exclusiveWithRules: LabelWithRules[] = rows
-    .filter(l => l.exclusive === 1)
-    .map(l => ({ ...l, rules: getLabelRules(l.id) }))
-
-  return rows.map(label => {
-    const rules = getLabelRules(label.id)
-    const { clause, args } = buildRulesWhere(rules)
-
-    const claimers = exclusiveWithRules.filter(l => l.sort_order < label.sort_order)
-    const excl = buildExclusionClause(claimers)
-    const fullClause = excl ? `(${clause}) AND ${excl.clause}` : clause
-    const fullArgs = excl ? [...args, ...excl.args] : args
-
-    const count = (getDb().prepare(
-      `SELECT COUNT(*) AS n FROM active_articles a WHERE (${fullClause})${unreadClause}`,
-    ).get(...fullArgs) as { n: number }).n
-    return { ...label, rules, article_count: count }
-  })
+  return rows.map(label => ({
+    ...label,
+    rules: getLabelRules(label.id),
+    article_count: countMap.get(label.id) ?? 0,
+  }))
 }
 
 export function getLabelById(id: number): Label | undefined {
@@ -157,6 +234,7 @@ export function createLabel(data: {
   const id = Number(info.lastInsertRowid)
   replaceRules(id, data.rules)
 
+  rebuildAllLabelMemberships()
   return getLabelById(id)!
 }
 
@@ -198,11 +276,18 @@ export function updateLabel(
       .run(firstOr?.match_text ?? null, firstOr?.match_field ?? null, id)
   }
 
+  // Rules, sort_order, and exclusivity all affect membership (the latter two via
+  // the exclusive-label exclusion), so rebuild whenever anything changed.
+  rebuildAllLabelMemberships()
   return getLabelById(id)
 }
 
 export function deleteLabel(id: number): boolean {
   const result = getDb().prepare('DELETE FROM labels WHERE id = ?').run(id)
+  // Deleting an exclusive label releases its claim on lower-priority labels'
+  // articles, so membership must be recomputed. (The deleted label's own rows
+  // are removed by ON DELETE CASCADE.)
+  if (result.changes > 0) rebuildAllLabelMemberships()
   return result.changes > 0
 }
 
@@ -214,34 +299,28 @@ export function getArticlesByLabel(
   labelId: number,
   opts: { limit: number; offset: number; unreadOnly?: boolean },
 ): { items: ArticleListItem[]; total: number; hasMore: boolean } {
-  const label = getLabelById(labelId)
-  if (!label) return { items: [], total: 0, hasMore: false }
-
-  const { clause, args } = buildRulesWhere(label.rules)
+  // Membership (including the exclusive-label exclusion) is precomputed in
+  // article_labels, so this is a fast indexed JOIN rather than a full-text scan.
   const unreadClause = opts.unreadOnly ? ' AND a.seen_at IS NULL' : ''
 
-  // Exclude articles already claimed by exclusive labels with higher priority
-  const claimers = (getDb().prepare(
-    'SELECT * FROM labels WHERE exclusive = 1 AND sort_order < ?',
-  ).all(label.sort_order) as Label[]).map(l => ({ ...l, rules: getLabelRules(l.id) }))
-  const excl = buildExclusionClause(claimers)
-  const fullClause = excl ? `(${clause}) AND ${excl.clause}` : clause
-  const fullArgs = excl ? [...args, ...excl.args] : args
-
-  const total = (getDb().prepare(
-    `SELECT COUNT(*) AS n FROM active_articles a WHERE (${fullClause})${unreadClause}`,
-  ).get(...fullArgs) as { n: number }).n
+  const total = (getDb().prepare(`
+    SELECT COUNT(*) AS n
+    FROM article_labels al
+    JOIN active_articles a ON a.id = al.article_id
+    WHERE al.label_id = ?${unreadClause}
+  `).get(labelId) as { n: number }).n
 
   const itemsWithExtra = getDb().prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, a.title, a.url,
            a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
            a.seen_at, a.read_at, a.bookmarked_at, a.liked_at, a.score
-    FROM active_articles a
+    FROM article_labels al
+    JOIN active_articles a ON a.id = al.article_id
     JOIN feeds f ON f.id = a.feed_id
-    WHERE (${fullClause})${unreadClause}
+    WHERE al.label_id = ?${unreadClause}
     ORDER BY a.published_at DESC
     LIMIT ? OFFSET ?
-  `).all(...fullArgs, opts.limit + 1, opts.offset) as ArticleListItem[]
+  `).all(labelId, opts.limit + 1, opts.offset) as ArticleListItem[]
 
   const hasMore = itemsWithExtra.length > opts.limit
   const items = hasMore ? itemsWithExtra.slice(0, opts.limit) : itemsWithExtra

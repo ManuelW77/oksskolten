@@ -1,4 +1,5 @@
 import { getDb, runNamed, getNamed, allNamed } from './connection.js'
+import { updateArticleLabels } from './labels.js'
 import type { Article, ArticleListItem, ArticleDetail } from './types.js'
 import type { MeiliArticleDoc } from '../search/client.js'
 import { syncArticleToSearch, deleteArticleFromSearch, deleteArticlesFromSearch, syncArticleScoreToSearch, syncArticleFiltersToSearch } from '../search/sync.js'
@@ -366,6 +367,7 @@ export function insertArticle(data: {
     last_error: data.last_error ?? null,
   })
   const articleId = info.lastInsertRowid as number
+  updateArticleLabels(articleId)
   const doc = buildMeiliDoc(articleId)
   if (doc) syncArticleToSearch(doc)
   return articleId
@@ -408,6 +410,8 @@ export function updateArticleContent(
   }
   if (fields.length === 0) return
   runNamed(`UPDATE articles SET ${fields.join(', ')} WHERE id = @id`, params)
+  // full_text feeds label rule matching; recompute membership when it changes.
+  if (data.full_text !== undefined) updateArticleLabels(articleId)
   const doc = buildMeiliDoc(articleId)
   if (doc) syncArticleToSearch(doc)
 }
