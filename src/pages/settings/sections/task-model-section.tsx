@@ -66,7 +66,7 @@ export function TaskModelSection({ settings, t }: { settings: Settings; t: TFunc
   const hasAnyLlmKey = LLM_API_PROVIDERS.some(p => configuredKeys[p]) || claudeCodeReady || configuredKeys['ollama'] || configuredKeys['vllm'] || configuredKeys['openrouter']
   const hasAnyTranslateKey = TRANSLATE_SERVICE_PROVIDERS.some(p => configuredKeys[p])
   const hasAnyKey = hasAnyLlmKey || hasAnyTranslateKey
-  const keysLoading = llmKeyStatuses.some(s => !s.data) || translateKeyStatuses.some(s => !s.data)
+  const keysLoading = llmKeyStatuses.some(s => !s.data) || translateKeyStatuses.some(s => !s.data) || !openrouterKey.data
 
   const tasks: TaskConfig[] = [
     {

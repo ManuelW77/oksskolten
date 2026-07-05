@@ -335,18 +335,16 @@ export function getAutoSummarizeCandidates(articleId: number): boolean {
   ).get(articleId)
   if (alreadySummarized) return false
 
-  const autoLabels = getDb().prepare(
-    'SELECT * FROM labels WHERE auto_summarize = 1',
-  ).all() as Omit<Label, 'rules'>[]
-
-  for (const row of autoLabels) {
-    const rules = getLabelRules(row.id)
-    if (rules.length === 0) continue
-    const { clause, args } = buildRulesWhere(rules)
-    const match = getDb().prepare(
-      `SELECT 1 FROM active_articles a WHERE a.id = ? AND (${clause})`,
-    ).get(articleId, ...args) as Record<string, unknown> | undefined
-    if (match) return true
-  }
-  return false
+  // Membership — including exclusive-label claiming — is materialized in
+  // article_labels by updateArticleLabels during ingest, which runs before this
+  // is called. Querying it keeps auto-summarize consistent with actual label
+  // membership (and avoids re-evaluating rule clauses).
+  const member = getDb().prepare(
+    `SELECT 1 FROM article_labels al
+       JOIN labels l ON l.id = al.label_id
+       JOIN active_articles a ON a.id = al.article_id
+      WHERE al.article_id = ? AND l.auto_summarize = 1
+      LIMIT 1`,
+  ).get(articleId)
+  return !!member
 }

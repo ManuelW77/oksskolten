@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import useSWR from 'swr'
 import { fetcher, apiPost, apiPatch } from '../../../lib/fetcher'
 import { PROVIDER_LABELS, LLM_API_PROVIDERS, TRANSLATE_SERVICE_PROVIDERS } from '../../../data/aiModels'
@@ -467,6 +467,7 @@ function OpenRouterCard({ t }: { t: TFunc }) {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; model_count?: number; error?: string } | null>(null)
+  const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Sync inputs with saved values on first load
   const [initialized, setInitialized] = useState(false)
@@ -476,9 +477,15 @@ function OpenRouterCard({ t }: { t: TFunc }) {
     setInitialized(true)
   }, [prefs, initialized])
 
+  // Clear any pending auto-hide timer on unmount
+  useEffect(() => () => {
+    if (messageTimerRef.current) clearTimeout(messageTimerRef.current)
+  }, [])
+
   function showMessage(text: string, type: 'success' | 'error') {
     setMessage({ text, type })
-    setTimeout(() => setMessage(null), 3000)
+    if (messageTimerRef.current) clearTimeout(messageTimerRef.current)
+    messageTimerRef.current = setTimeout(() => setMessage(null), 3000)
   }
 
   const handleSave = useCallback(async () => {
