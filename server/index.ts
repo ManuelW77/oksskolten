@@ -117,6 +117,7 @@ app.addHook('onResponse', (req, reply, done) => {
 app.addHook('onRequest', (_req, reply, done) => {
   reply.header('X-Frame-Options', 'DENY')
   reply.header('X-Content-Type-Options', 'nosniff')
+  reply.header('Referrer-Policy', 'strict-origin-when-cross-origin')
   // Hashes cover the two inline scripts in index.html (theme init + boot error handler).
   // Must be recomputed if those scripts change.
   reply.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'sha256-VAhGjND/znOjpK1ZuoI0YbrnC/Vl+7ANn8OSAx1bqjo=' 'sha256-GAGRPtDnfjLUhVjHqZFybOiMH1CNt1cbmu5Jqg7wzNU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'")
