@@ -270,10 +270,11 @@ export function updateLabel(
 
   if (data.rules !== undefined) {
     replaceRules(id, data.rules)
-    // Sync legacy columns — clear when no or-rules remain so stale values don't mislead old clients
+    // Sync legacy columns — fall back to '' / 'both' when no or-rules remain, since
+    // match_text / match_field are NOT NULL (mirrors createLabel's handling)
     const firstOr = data.rules.find(r => r.rule_type === 'or')
     getDb().prepare('UPDATE labels SET match_text = ?, match_field = ? WHERE id = ?')
-      .run(firstOr?.match_text ?? null, firstOr?.match_field ?? null, id)
+      .run(firstOr?.match_text ?? '', firstOr?.match_field ?? 'both', id)
   }
 
   // Rules, sort_order, and exclusivity all affect membership (the latter two via

@@ -443,15 +443,15 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
       }
       flushBatch()
     }
-  }, [feedId, categoryId, flushBatch])
+  }, [feedId, categoryId, labelId, flushBatch])
 
-  // Reset autoReadIds, noFloor, showReadArticles, and keyboard focus when feed/category changes
+  // Reset autoReadIds, noFloor, showReadArticles, and keyboard focus when feed/category/label changes
   useEffect(() => {
     setAutoReadIds(new Set())
     setNoFloor(false)
     setShowReadArticles(false)
     setFocusedItemId(null)
-  }, [feedId, categoryId, setFocusedItemId])
+  }, [feedId, categoryId, labelId, setFocusedItemId])
 
   return (
     <main ref={listRef} className={categoryId ?? labelId ? undefined : 'max-w-2xl mx-auto'} role={!isGridLayout ? 'listbox' : undefined}>
