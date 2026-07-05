@@ -445,6 +445,30 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     }
   }, [feedId, categoryId, labelId, flushBatch])
 
+  // Flush immediately when the tab is backgrounded or the page is being hidden/unloaded.
+  // On long lists scheduleFlush keeps deferring while hasMore stays true, so otherwise the
+  // queued reads would only reach the server on a clean unmount — lost on hard close/crash
+  // and invisible to other devices in the meantime. visibilitychange->hidden is the reliable
+  // signal (especially on mobile); pagehide is a best-effort fallback.
+  useEffect(() => {
+    const flushNow = () => {
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current)
+        flushTimerRef.current = null
+      }
+      flushBatch()
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushNow()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', flushNow)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pagehide', flushNow)
+    }
+  }, [flushBatch])
+
   // Reset autoReadIds, noFloor, showReadArticles, and keyboard focus when feed/category/label changes
   useEffect(() => {
     setAutoReadIds(new Set())
