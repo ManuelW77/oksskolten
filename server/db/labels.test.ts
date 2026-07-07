@@ -102,6 +102,38 @@ describe('label membership materialization', () => {
     expect(getLabels().map(l => l.id)).toEqual([general.id, exclusive.id])
   })
 
+  it('reorderLabels preserves membership when no exclusive label is involved', () => {
+    const a = createLabel({ name: 'Apple', rules: [orRule('apple')] })
+    const b = createLabel({ name: 'Banana', rules: [orRule('banana')] })
+    addArticle('Apple news')
+    addArticle('Banana bread')
+    expect(getArticlesByLabel(a.id, { limit: 20, offset: 0 }).total).toBe(1)
+    expect(getArticlesByLabel(b.id, { limit: 20, offset: 0 }).total).toBe(1)
+
+    // Swapping two non-exclusive labels must not drop either label's articles.
+    reorderLabels([b.id, a.id])
+
+    expect(getArticlesByLabel(a.id, { limit: 20, offset: 0 }).total).toBe(1)
+    expect(getArticlesByLabel(b.id, { limit: 20, offset: 0 }).total).toBe(1)
+    expect(getLabels().map(l => l.id)).toEqual([b.id, a.id])
+  })
+
+  it('rebuilds lower-priority labels when an exclusive label\'s rules change', () => {
+    const exclusive = createLabel({ name: 'Excl', exclusive: true, rules: [orRule('apple')] })
+    const general = createLabel({ name: 'General', rules: [orRule('apple')] })
+    addArticle('Apple pie')
+    addArticle('Apple tart')
+    // Exclusive claims both -> general is starved.
+    expect(getArticlesByLabel(general.id, { limit: 20, offset: 0 }).total).toBe(0)
+
+    // Point the exclusive label elsewhere -> it no longer claims the apple articles,
+    // so the lower-priority "general" label must pick them up.
+    updateLabel(exclusive.id, { rules: [orRule('banana')] })
+
+    expect(getArticlesByLabel(general.id, { limit: 20, offset: 0 }).total).toBe(2)
+    expect(getArticlesByLabel(exclusive.id, { limit: 20, offset: 0 }).total).toBe(0)
+  })
+
   it('releases the exclusive claim when the exclusive label is deleted', () => {
     const exclusive = createLabel({ name: 'Breaking', exclusive: true, rules: [orRule('news')] })
     const general = createLabel({ name: 'General', rules: [orRule('news')] })

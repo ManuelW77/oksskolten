@@ -218,6 +218,7 @@ export function createLabel(data: {
   exclusive?: boolean
   rules: Array<{ match_text: string; match_field: 'title' | 'full_text' | 'both'; rule_type: 'and' | 'or' | 'not' }>
 }): Label {
+  const before = membershipSignatures()
   const maxOrder = getDb().prepare(
     'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM labels',
   ).get() as { next: number }
@@ -234,7 +235,9 @@ export function createLabel(data: {
   const id = Number(info.lastInsertRowid)
   replaceRules(id, data.rules)
 
-  rebuildAllLabelMemberships()
+  // A freshly created label sits at the lowest priority (max sort_order), so it can
+  // never claim articles from existing labels — only its own membership is new.
+  rebuildChangedMemberships(before)
   return getLabelById(id)!
 }
 
@@ -250,6 +253,7 @@ export function updateLabel(
 ): Label | undefined {
   if (!getLabelById(id)) return undefined
 
+  const before = membershipSignatures()
   const fields: string[] = []
   const params: Record<string, unknown> = { id }
 
@@ -278,9 +282,82 @@ export function updateLabel(
   }
 
   // Rules, sort_order, and exclusivity all affect membership (the latter two via
-  // the exclusive-label exclusion), so rebuild whenever anything changed.
-  rebuildAllLabelMemberships()
+  // the exclusive-label exclusion). Rebuild only the labels whose signature changed.
+  rebuildChangedMemberships(before)
   return getLabelById(id)
+}
+
+/** Rebuild membership for a specific set of labels only (cheaper than a full rebuild). */
+function rebuildLabelMembershipsFor(labelIds: number[]): void {
+  if (labelIds.length === 0) return
+  const db = getDb()
+  const { labels, exclusiveWithRules } = loadLabelsWithExclusive()
+  const byId = new Map(labels.map(l => [l.id, l]))
+
+  db.transaction(() => {
+    for (const id of labelIds) {
+      db.prepare('DELETE FROM article_labels WHERE label_id = ?').run(id)
+      const label = byId.get(id)
+      if (!label) continue
+      const match = buildLabelMatchClause(label, getLabelRules(id), exclusiveWithRules)
+      if (!match) continue
+      db.prepare(
+        `INSERT OR IGNORE INTO article_labels (article_id, label_id)
+         SELECT a.id, ? FROM active_articles a WHERE (${match.clause})`,
+      ).run(id, ...match.args)
+    }
+  })()
+}
+
+/**
+ * Per-label signature of everything its membership depends on: its own rules plus
+ * the ordered list of higher-priority exclusive labels *and their rules*. An
+ * article belongs to a label iff it matches the label's rules and isn't claimed by
+ * a higher-priority exclusive label, so two labels with equal signatures have equal
+ * membership. Diffing signatures before/after any mutation yields exactly the set
+ * of labels whose membership can have changed — nothing else needs rebuilding.
+ */
+function membershipSignatures(): Map<number, string> {
+  const db = getDb()
+  const labels = db.prepare(
+    'SELECT id, sort_order, exclusive FROM labels',
+  ).all() as { id: number; sort_order: number; exclusive: number }[]
+  const ruleRows = db.prepare(
+    'SELECT label_id, rule_type, match_field, match_text FROM label_rules ORDER BY label_id, id',
+  ).all() as { label_id: number; rule_type: string; match_field: string; match_text: string }[]
+
+  const ruleSig = new Map<number, string>()
+  for (const r of ruleRows) {
+    const prev = ruleSig.get(r.label_id) ?? ''
+    ruleSig.set(r.label_id, `${prev}${r.rule_type}${r.match_field}${r.match_text}`)
+  }
+  const exclusives = labels
+    .filter(l => l.exclusive === 1)
+    .sort((a, b) => a.sort_order - b.sort_order)
+
+  const sig = new Map<number, string>()
+  for (const l of labels) {
+    const above = exclusives
+      .filter(e => e.sort_order < l.sort_order)
+      .map(e => `${e.id}:${ruleSig.get(e.id) ?? ''}`)
+      .join(';')
+    sig.set(l.id, `${ruleSig.get(l.id) ?? ''}|${above}`)
+  }
+  return sig
+}
+
+/**
+ * Given a signature snapshot taken *before* a mutation, rebuild membership only for
+ * labels whose signature changed afterwards (new labels included, since they have
+ * no prior signature). Replaces the old full-table rebuild on every label change.
+ */
+function rebuildChangedMemberships(before: Map<number, string>): void {
+  const after = membershipSignatures()
+  const affected: number[] = []
+  for (const [id, sig] of after) {
+    if (before.get(id) !== sig) affected.push(id)
+  }
+  rebuildLabelMembershipsFor(affected)
 }
 
 /**
@@ -290,21 +367,21 @@ export function updateLabel(
  */
 export function reorderLabels(orderedIds: number[]): void {
   const db = getDb()
+  const before = membershipSignatures()
   db.transaction(() => {
     const update = db.prepare('UPDATE labels SET sort_order = ? WHERE id = ?')
     orderedIds.forEach((id, index) => update.run(index, id))
   })()
-  // sort_order drives the exclusive-label exclusion, so membership must be
-  // recomputed (mirrors updateLabel's rebuild on sort_order change).
-  rebuildAllLabelMemberships()
+  rebuildChangedMemberships(before)
 }
 
 export function deleteLabel(id: number): boolean {
+  // A deleted exclusive label releases its claim on lower-priority labels, whose
+  // membership must be recomputed; a non-exclusive delete affects only its own
+  // (cascade-removed) rows. rebuildChangedMemberships handles both via signatures.
+  const before = membershipSignatures()
   const result = getDb().prepare('DELETE FROM labels WHERE id = ?').run(id)
-  // Deleting an exclusive label releases its claim on lower-priority labels'
-  // articles, so membership must be recomputed. (The deleted label's own rows
-  // are removed by ON DELETE CASCADE.)
-  if (result.changes > 0) rebuildAllLabelMemberships()
+  if (result.changes > 0) rebuildChangedMemberships(before)
   return result.changes > 0
 }
 
