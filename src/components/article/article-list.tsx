@@ -109,7 +109,15 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     getKey,
     fetcher,
     {
-      revalidateFirstPage: isCollectionView,
+      // The global SWRConfig disables revalidateIfStale/onMount to avoid
+      // refetching on every navigation. For the article list that caused stale
+      // lists to persist (new articles not appearing until a full page reload),
+      // so opt back in here: on (re)mount, refresh the first page to pull in new
+      // articles. Only page 1 is revalidated (revalidateAll defaults to false),
+      // and revalidateOnFocus stays off, so this stays cheap and non-janky.
+      revalidateFirstPage: true,
+      revalidateOnMount: true,
+      revalidateIfStale: true,
     },
   )
 
@@ -290,14 +298,31 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const hasMoreRef = useRef(hasMore)
   hasMoreRef.current = hasMore
 
+  // Stable ref so flushBatch can call the latest mutate without it becoming a dependency
+  const mutateArticlesRef = useRef(mutate)
+  mutateArticlesRef.current = mutate
+
   const flushBatch = useCallback(() => {
     if (batchQueue.current.size === 0) return
     const ids = [...batchQueue.current]
     batchQueue.current.clear()
+    const idSet = new Set(ids)
+    const now = new Date().toISOString()
     markSeenOnServer(ids)
-      .then(() => globalMutate(
-        (key: string) => typeof key === 'string' && (key.startsWith('/api/feeds') || key.startsWith('/api/labels')),
-      ))
+      .then(() => {
+        void globalMutate(
+          (key: string) => typeof key === 'string' && (key.startsWith('/api/feeds') || key.startsWith('/api/labels')),
+        )
+        void mutateArticlesRef.current(
+          (pages) => pages?.map(page => ({
+            ...page,
+            articles: page.articles.map(a =>
+              idSet.has(a.id) ? { ...a, seen_at: a.seen_at ?? now } : a
+            ),
+          })),
+          { revalidate: false },
+        )
+      })
       .catch(() => {})
   }, [globalMutate])
 
@@ -418,15 +443,39 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
       }
       flushBatch()
     }
-  }, [feedId, categoryId, flushBatch])
+  }, [feedId, categoryId, labelId, flushBatch])
 
-  // Reset autoReadIds, noFloor, showReadArticles, and keyboard focus when feed/category changes
+  // Flush immediately when the tab is backgrounded or the page is being hidden/unloaded.
+  // On long lists scheduleFlush keeps deferring while hasMore stays true, so otherwise the
+  // queued reads would only reach the server on a clean unmount — lost on hard close/crash
+  // and invisible to other devices in the meantime. visibilitychange->hidden is the reliable
+  // signal (especially on mobile); pagehide is a best-effort fallback.
+  useEffect(() => {
+    const flushNow = () => {
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current)
+        flushTimerRef.current = null
+      }
+      flushBatch()
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushNow()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', flushNow)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pagehide', flushNow)
+    }
+  }, [flushBatch])
+
+  // Reset autoReadIds, noFloor, showReadArticles, and keyboard focus when feed/category/label changes
   useEffect(() => {
     setAutoReadIds(new Set())
     setNoFloor(false)
     setShowReadArticles(false)
     setFocusedItemId(null)
-  }, [feedId, categoryId, setFocusedItemId])
+  }, [feedId, categoryId, labelId, setFocusedItemId])
 
   return (
     <main ref={listRef} className={categoryId ?? labelId ? undefined : 'max-w-2xl mx-auto'} role={!isGridLayout ? 'listbox' : undefined}>

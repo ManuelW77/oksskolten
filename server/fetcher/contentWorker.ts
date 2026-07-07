@@ -138,10 +138,13 @@ export function parseHtml(input: ParseHtmlInput): ParseHtmlResult {
   if (jsonLdBody) {
     const jsonLdLen = jsonLdBody.replace(/\s+/g, ' ').trim().length
     if (jsonLdLen > readabilityTextLen * 1.5) {
-      // Convert plain text paragraphs to minimal HTML for the post-clean / Turndown pipeline
+      // Convert plain text paragraphs to minimal HTML for the post-clean / Turndown pipeline.
+      // jsonLdBody is plain text from an untrusted feed, so escape HTML metacharacters
+      // before wrapping — otherwise stray </> would be parsed as markup downstream.
+      const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       contentHtml = jsonLdBody
         .split(/\n{2,}/)
-        .map(p => `<p>${p.trim().replace(/\n/g, ' ')}</p>`)
+        .map(p => `<p>${escapeHtml(p.trim().replace(/\n/g, ' '))}</p>`)
         .filter(p => p.length > 7)
         .join('\n')
     }

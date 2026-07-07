@@ -57,10 +57,11 @@ export function useFetchProgress() {
     void globalMutate((key: unknown) =>
       typeof key === 'string' && key.includes('/api/feeds'))
     // globalMutate(filterFn) silently skips $inf$ keys from useSWRInfinite,
-    // so walk the cache directly to invalidate article list pages too.
+    // so walk the cache directly to invalidate article list pages too. Covers
+    // the main list (/api/articles) and label article lists (/api/labels/:id/articles).
     for (const key of cache.keys()) {
       if (typeof key !== 'string') continue
-      if (key.includes('/api/articles')) {
+      if (key.includes('/api/articles') || key.includes('/api/labels')) {
         void globalMutate(key)
       }
     }
