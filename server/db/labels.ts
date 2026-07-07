@@ -283,6 +283,22 @@ export function updateLabel(
   return getLabelById(id)
 }
 
+/**
+ * Reassign label priority from an explicitly ordered list of ids. The first id
+ * becomes the highest priority (sort_order 0). Ids not present are left untouched
+ * only if the caller omits them — callers should pass the full ordered list.
+ */
+export function reorderLabels(orderedIds: number[]): void {
+  const db = getDb()
+  db.transaction(() => {
+    const update = db.prepare('UPDATE labels SET sort_order = ? WHERE id = ?')
+    orderedIds.forEach((id, index) => update.run(index, id))
+  })()
+  // sort_order drives the exclusive-label exclusion, so membership must be
+  // recomputed (mirrors updateLabel's rebuild on sort_order change).
+  rebuildAllLabelMemberships()
+}
+
 export function deleteLabel(id: number): boolean {
   const result = getDb().prepare('DELETE FROM labels WHERE id = ?').run(id)
   // Deleting an exclusive label releases its claim on lower-priority labels'

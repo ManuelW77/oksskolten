@@ -899,6 +899,8 @@ const dict = {
   'settings.labelUnreadOnly': { ja: '未読のみ表示', en: 'Show unread only', de: 'Nur Ungelesene anzeigen' },
   'settings.addLabel': { ja: 'ラベルを追加', en: 'Add label', de: 'Label hinzufügen' },
   'settings.editLabel': { ja: 'ラベルを編集', en: 'Edit label', de: 'Label bearbeiten' },
+  'settings.moveLabelUp': { ja: 'ラベルを上へ移動', en: 'Move label up', de: 'Label nach oben verschieben' },
+  'settings.moveLabelDown': { ja: 'ラベルを下へ移動', en: 'Move label down', de: 'Label nach unten verschieben' },
   'settings.labelSaved': { ja: 'ラベルを保存しました', en: 'Label saved', de: 'Label gespeichert' },
   'settings.labelDeleted': { ja: 'ラベルを削除しました', en: 'Label deleted', de: 'Label gelöscht' },
   'settings.labelDeleteConfirm': { ja: '「${name}」を削除しますか？', en: 'Delete label "${name}"?', de: 'Label „${name}" löschen?' },

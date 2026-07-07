@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { getLabels, getLabelById, createLabel, updateLabel, deleteLabel, getArticlesByLabel } from '../db.js'
+import { getLabels, getLabelById, createLabel, updateLabel, deleteLabel, reorderLabels, getArticlesByLabel } from '../db.js'
 import { requireJson } from '../auth.js'
 import { NumericIdParams, parseOrBadRequest } from '../lib/validation.js'
 
@@ -26,6 +26,10 @@ const UpdateLabelBody = z.object({
   auto_summarize: z.boolean().optional(),
   exclusive: z.boolean().optional(),
   rules: z.array(LabelRule).min(1).optional(),
+})
+
+const ReorderBody = z.object({
+  ids: z.array(z.number().int()).min(1, 'at least one id is required'),
 })
 
 const LabelArticlesQuery = z.object({
@@ -59,6 +63,18 @@ export async function labelRoutes(api: FastifyInstance): Promise<void> {
       if (!body) return
       const label = createLabel(body)
       reply.status(201).send(label)
+    },
+  )
+
+  // Static path — Fastify prioritizes it over the parametric `/api/labels/:id`.
+  api.post(
+    '/api/labels/reorder',
+    { preHandler: [requireJson] },
+    async (request, reply) => {
+      const body = parseOrBadRequest(ReorderBody, request.body, reply)
+      if (!body) return
+      reorderLabels(body.ids)
+      reply.send({ labels: getLabels() })
     },
   )
 

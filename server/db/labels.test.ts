@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setupTestDb } from '../__tests__/helpers/testDb.js'
 import { getDb } from './connection.js'
-import { createLabel, updateLabel, deleteLabel, getLabels, getArticlesByLabel } from './labels.js'
+import { createLabel, updateLabel, deleteLabel, reorderLabels, getLabels, getArticlesByLabel } from './labels.js'
 import { insertArticle } from './articles.js'
 
 function seedFeed() {
@@ -83,6 +83,23 @@ describe('label membership materialization', () => {
     const { items, total } = getArticlesByLabel(label.id, { limit: 20, offset: 0 })
     expect(total).toBe(1)
     expect(items[0].title).toBe('Banana bread')
+  })
+
+  it('reorderLabels shifts exclusive-claim priority (matched label wins after promotion)', () => {
+    // "Breaking" is exclusive and created first, so it claims "news" articles and
+    // starves the lower-priority "General" label.
+    const exclusive = createLabel({ name: 'Breaking', exclusive: true, rules: [orRule('news')] })
+    const general = createLabel({ name: 'General', rules: [orRule('news')] })
+    addArticle('Tech news')
+
+    expect(getArticlesByLabel(general.id, { limit: 20, offset: 0 }).total).toBe(0)
+
+    // Promote "General" above the exclusive label -> exclusion no longer applies.
+    reorderLabels([general.id, exclusive.id])
+
+    expect(getArticlesByLabel(general.id, { limit: 20, offset: 0 }).total).toBe(1)
+    // Ordering is reflected in getLabels (sorted by sort_order ASC).
+    expect(getLabels().map(l => l.id)).toEqual([general.id, exclusive.id])
   })
 
   it('releases the exclusive claim when the exclusive label is deleted', () => {

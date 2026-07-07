@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
-import { Pencil, Plus, Trash2, X, Check } from 'lucide-react'
+import { Pencil, Plus, Trash2, X, Check, ChevronUp, ChevronDown } from 'lucide-react'
 import { useI18n } from '../../../lib/i18n'
 import { fetcher, apiPost, apiPatch, apiDelete } from '../../../lib/fetcher'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -47,7 +47,7 @@ export function LabelsSection() {
   const { settings } = useAppLayout()
   const { mutate: globalMutate } = useSWRConfig()
   const { data } = useSWR<{ labels: LabelWithCount[] }>('/api/labels', fetcher)
-  const labels = data?.labels ?? []
+  const labels = useMemo(() => data?.labels ?? [], [data])
 
   const [form, setForm] = useState<LabelForm>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -104,6 +104,20 @@ export function LabelsSection() {
     }
   }, [deleteId, revalidate])
 
+  const handleMove = useCallback(async (index: number, dir: -1 | 1) => {
+    const target = index + dir
+    if (target < 0 || target >= labels.length) return
+    const ids = labels.map(l => l.id)
+    ;[ids[index], ids[target]] = [ids[target], ids[index]]
+    try {
+      await apiPost('/api/labels/reorder', { ids })
+      revalidate()
+    } catch {
+      // revalidate on failure so the UI snaps back to the server order
+      revalidate()
+    }
+  }, [labels, revalidate])
+
   const deletingLabel = deleteId !== null ? labels.find(l => l.id === deleteId) : null
 
   return (
@@ -129,7 +143,7 @@ export function LabelsSection() {
           <p className="text-sm text-muted">{t('settings.labelsEmpty')}</p>
         )}
 
-        {labels.map((label) =>
+        {labels.map((label, i) =>
           editingId === label.id ? (
             <LabelFormRow
               key={label.id}
@@ -142,8 +156,11 @@ export function LabelsSection() {
             <LabelRow
               key={label.id}
               label={label}
+              index={i}
+              total={labels.length}
               onEdit={handleStartEdit}
               onDelete={setDeleteId}
+              onMove={handleMove}
             />
           ),
         )}
@@ -185,11 +202,14 @@ export function LabelsSection() {
 
 interface LabelRowProps {
   label: LabelWithCount
+  index: number
+  total: number
   onEdit: (label: LabelWithCount) => void
   onDelete: (id: number) => void
+  onMove: (index: number, dir: -1 | 1) => void
 }
 
-function LabelRow({ label, onEdit, onDelete }: LabelRowProps) {
+function LabelRow({ label, index, total, onEdit, onDelete, onMove }: LabelRowProps) {
   const { t } = useI18n()
   const rules = label.rules.length > 0
     ? label.rules
@@ -218,6 +238,26 @@ function LabelRow({ label, onEdit, onDelete }: LabelRowProps) {
       </div>
       <div className="flex items-center gap-3 shrink-0 pt-0.5">
         <span className="text-xs text-muted tabular-nums">{label.article_count}</span>
+        <div className="flex flex-col -my-0.5">
+          <button
+            type="button"
+            onClick={() => onMove(index, -1)}
+            disabled={index === 0}
+            className="text-muted hover:text-text transition-colors disabled:opacity-30 disabled:pointer-events-none"
+            aria-label={t('settings.moveLabelUp')}
+          >
+            <ChevronUp size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove(index, 1)}
+            disabled={index === total - 1}
+            className="text-muted hover:text-text transition-colors disabled:opacity-30 disabled:pointer-events-none"
+            aria-label={t('settings.moveLabelDown')}
+          >
+            <ChevronDown size={14} />
+          </button>
+        </div>
         <button
           type="button"
           onClick={() => onEdit(label)}
