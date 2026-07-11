@@ -157,6 +157,12 @@ CREATE INDEX idx_articles_category_published ON articles(category_id, published_
 CREATE INDEX idx_articles_feed_score ON articles(feed_id, score DESC);
 CREATE INDEX idx_articles_category_score ON articles(category_id, score DESC);
 
+-- Hot-path indexes (0014): shaped to serve ORDER BY / covering reads directly,
+-- since base-table row reads traverse full_text overflow pages.
+CREATE INDEX idx_articles_seen_published ON articles(seen_at, published_at DESC, purged_at);          -- unread list
+CREATE INDEX idx_articles_active_score_published ON articles(score DESC, published_at DESC) WHERE purged_at IS NULL; -- score-sorted list
+CREATE INDEX idx_articles_feed_counts ON articles(feed_id, seen_at, published_at, fetched_at, purged_at); -- sidebar per-feed aggregates (covering)
+
 CREATE TABLE settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL

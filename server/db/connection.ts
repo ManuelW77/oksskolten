@@ -31,6 +31,9 @@ function openDb(dbUrl: string) {
     : new Database(dbUrl)
   if (!remote) {
     instance.pragma('journal_mode = WAL')
+    // In WAL mode, NORMAL only fsyncs on checkpoint instead of every commit;
+    // a power loss can drop the last commits but cannot corrupt the database.
+    instance.pragma('synchronous = NORMAL')
   }
   instance.pragma('foreign_keys = ON')
   // Limit SQLite internal heap growth to prevent native memory accumulation.
@@ -49,6 +52,9 @@ export function shrinkMemory() {
     const remote = isRemote(process.env.DATABASE_URL || '')
     if (!remote) {
       db.pragma('wal_checkpoint(TRUNCATE)')
+      // Refresh sqlite_stat1 as data drifts; without stats the planner
+      // falls back to the older, narrower indexes on articles.
+      db.pragma('optimize')
     }
     db.pragma('shrink_memory')
     log.info('[db] Memory shrunk' + (remote ? '' : ' + WAL checkpoint'))
