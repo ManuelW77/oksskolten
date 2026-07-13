@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, Outlet } from 'react-router-dom'
 import { LocaleContext } from '../../lib/i18n'
 import { KeyboardNavigationProvider } from '../../contexts/keyboard-navigation-context'
@@ -447,6 +447,98 @@ describe('ArticleList', () => {
     const readEl = document.querySelector('[data-article-id="2"]')
     expect(unreadEl?.getAttribute('data-article-unread')).toBe('1')
     expect(readEl?.getAttribute('data-article-unread')).toBe('0')
+  })
+
+  describe('auto-mark-read: reaching the bottom of the page', () => {
+    function setScrollGeometry({ scrollHeight, innerHeight, scrollY }: { scrollHeight: number; innerHeight: number; scrollY: number }) {
+      Object.defineProperty(document.documentElement, 'scrollHeight', { value: scrollHeight, configurable: true })
+      Object.defineProperty(window, 'innerHeight', { value: innerHeight, configurable: true, writable: true })
+      Object.defineProperty(window, 'scrollY', { value: scrollY, configurable: true, writable: true })
+    }
+
+    function loadedList() {
+      swrInfiniteReturn = {
+        data: [{
+          articles: [
+            makeArticle({ id: 1, title: 'First', seen_at: '2026-01-01' }),
+            makeArticle({ id: 2, title: 'Last', seen_at: null }),
+          ],
+          total: 2,
+          has_more: false,
+        }],
+        error: undefined,
+        size: 1,
+        setSize: vi.fn(),
+        isLoading: false,
+        isValidating: false,
+        mutate: vi.fn(),
+      }
+    }
+
+    it('marks the last article as read once the page is scrolled to the bottom', () => {
+      mockSettings.autoMarkRead = 'on' as any
+      loadedList()
+      setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 0 })
+
+      renderArticleList()
+      // Not at the bottom yet — the last article stays unread.
+      expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('1')
+
+      setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 1200 })
+      fireEvent.scroll(window)
+
+      expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('0')
+    })
+
+    it('tolerates a fractional gap at maximum scroll', () => {
+      mockSettings.autoMarkRead = 'on' as any
+      loadedList()
+      setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 0 })
+
+      renderArticleList()
+
+      // Browser leaves the page a sub-pixel short of the true bottom — the very
+      // case that kept the last article stuck as unread.
+      setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 1197.5 })
+      fireEvent.scroll(window)
+
+      expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('0')
+    })
+
+    it('does not mark articles read when the page cannot be scrolled', () => {
+      mockSettings.autoMarkRead = 'on' as any
+      loadedList()
+      // Content fits entirely in the viewport: the user never scrolled past anything.
+      setScrollGeometry({ scrollHeight: 800, innerHeight: 800, scrollY: 0 })
+
+      renderArticleList()
+      fireEvent.scroll(window)
+
+      expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('1')
+    })
+
+    it('does not mark articles read while more pages are still loading', () => {
+      mockSettings.autoMarkRead = 'on' as any
+      loadedList()
+      swrInfiniteReturn.data[0].has_more = true
+      setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 1200 })
+
+      renderArticleList()
+      fireEvent.scroll(window)
+
+      expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('1')
+    })
+
+    it('does nothing when auto-mark-read is off', () => {
+      mockSettings.autoMarkRead = 'off' as any
+      loadedList()
+      setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 1200 })
+
+      renderArticleList()
+      fireEvent.scroll(window)
+
+      expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('1')
+    })
   })
 
   it('validating state shows skeleton in sentinel', () => {

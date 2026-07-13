@@ -434,6 +434,45 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     return () => mo.disconnect()
   }, [isAutoMarkEnabled])
 
+  // Safety net for the final article(s).
+  //
+  // The scroll spacer below sizes the page so that at maximum scroll the last
+  // article sits *exactly* on the header line. That leaves zero slack: any
+  // fractional scroll offset, viewport rounding, or mismatch between the
+  // measured header height and --header-height keeps the last article a hair
+  // below the line, so the IntersectionObserver never sees it cross and it
+  // stays unread forever. Once the list is fully loaded, reaching the bottom of
+  // the page means every article has been scrolled past — mark whatever is
+  // still unread as read.
+  useEffect(() => {
+    if (!isAutoMarkEnabled || isCollectionView || hasMore || isValidating) return
+    const list = listRef.current
+    if (!list) return
+
+    const BOTTOM_THRESHOLD = 4
+
+    const checkBottom = () => {
+      const docHeight = document.documentElement.scrollHeight
+      // Nothing to scroll past — don't mark articles the user never moved by.
+      if (docHeight - window.innerHeight <= BOTTOM_THRESHOLD) return
+      if (docHeight - (window.scrollY + window.innerHeight) > BOTTOM_THRESHOLD) return
+
+      const nodes = list.querySelectorAll<HTMLElement>('[data-article-unread="1"]')
+      nodes.forEach(node => {
+        const articleId = Number(node.dataset.articleId)
+        if (articleId) markReadRef.current(articleId)
+      })
+    }
+
+    window.addEventListener('scroll', checkBottom, { passive: true })
+    window.addEventListener('resize', checkBottom)
+    checkBottom()
+    return () => {
+      window.removeEventListener('scroll', checkBottom)
+      window.removeEventListener('resize', checkBottom)
+    }
+  }, [isAutoMarkEnabled, isCollectionView, hasMore, isValidating])
+
   // Flush remaining batch on unmount or feed/category change
   useEffect(() => {
     return () => {
