@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, Outlet } from 'react-router-dom'
 import { LocaleContext } from '../../lib/i18n'
 import { KeyboardNavigationProvider } from '../../contexts/keyboard-navigation-context'
+import { saveScrollPosition } from '../../hooks/use-scroll-restoration'
 import type { ArticleListItem } from '../../../shared/types'
 
 // --- Mocks ---
@@ -568,6 +569,51 @@ describe('ArticleList', () => {
 
       expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('1')
     })
+
+    // Regression: resuming a category after a break. A revalidation or the
+    // stale-read filter shortens the document, the browser clamps scrollY to
+    // the new maximum, and the user's next wheel tick arrives with the page
+    // already at the bottom. That is the page moving, not the user scrolling
+    // past everything.
+    it('does not mark articles read when the document shrank under the user', () => {
+      mockSettings.autoMarkRead = 'on' as any
+      loadedList()
+      setScrollGeometry({ scrollHeight: 4000, innerHeight: 800, scrollY: 1200 })
+
+      renderArticleList()
+
+      // List shrinks; scrollY is clamped to the new bottom.
+      setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 1200 })
+      userScroll()
+
+      expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('1')
+
+      // Once the height is stable again, a real gesture still works.
+      userScroll()
+      expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('0')
+    })
+
+    // Regression: a gesture early in the visit must not license a mark-read
+    // that happens much later without any user involvement.
+    it('does not mark articles read long after the last user gesture', () => {
+      mockSettings.autoMarkRead = 'on' as any
+      loadedList()
+      setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 0 })
+
+      renderArticleList()
+      fireEvent.wheel(window)
+
+      vi.useFakeTimers()
+      try {
+        vi.setSystemTime(Date.now() + 60_000)
+        setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 1200 })
+        fireEvent.scroll(window)
+      } finally {
+        vi.useRealTimers()
+      }
+
+      expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('1')
+    })
   })
 
   describe('stale read articles on view entry', () => {
@@ -617,6 +663,40 @@ describe('ArticleList', () => {
 
       expect(screen.getByText('Read Earlier')).toBeTruthy()
       expect(screen.getByText('New Article')).toBeTruthy()
+    })
+
+    // Regression: resuming mid-list. The saved scroll offset belongs to the
+    // cached list including its read articles — filtering them out here would
+    // shorten the document and throw the user to the end of the list.
+    it('keeps read articles when returning to a saved scroll position', () => {
+      swrInfiniteReturn = {
+        data: [{
+          articles: [
+            makeArticle({ id: 1, title: 'Read Earlier', seen_at: '2026-01-01' }),
+            makeArticle({ id: 2, title: 'New Article', seen_at: null }),
+          ],
+          total: 2,
+          has_more: false,
+        }],
+        error: undefined,
+        size: 1,
+        setSize: vi.fn(),
+        isLoading: false,
+        isValidating: false,
+        mutate: vi.fn(),
+      }
+
+      Object.defineProperty(window, 'scrollY', { value: 1200, configurable: true, writable: true })
+      saveScrollPosition('/inbox')
+      try {
+        renderArticleList('/inbox')
+
+        expect(screen.getByText('Read Earlier')).toBeTruthy()
+        expect(screen.getByText('New Article')).toBeTruthy()
+      } finally {
+        Object.defineProperty(window, 'scrollY', { value: 0, configurable: true, writable: true })
+        saveScrollPosition('/inbox')
+      }
     })
   })
 

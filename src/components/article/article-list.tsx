@@ -23,6 +23,7 @@ import { FeedErrorBanner } from '../feed/feed-error-banner'
 import { Skeleton } from '../ui/skeleton'
 import { useKeyboardNavigationContext } from '../../contexts/keyboard-navigation-context'
 import { useKeyboardNavigation } from '../../hooks/use-keyboard-navigation'
+import { getSavedScrollPosition } from '../../hooks/use-scroll-restoration'
 import { apiPatch } from '../../lib/fetcher'
 import type { ArticleListItem, FeedWithCounts } from '../../../shared/types'
 import type { LayoutName } from '../../data/layouts'
@@ -140,11 +141,21 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   // ids once per view and drop them from the rendered list. Articles read
   // during *this* visit are not in the snapshot, so they stay in place and the
   // list never shifts under the user mid-scroll.
+  //
+  // Only applies when the view opens at the top. When a scroll position was
+  // saved for this path the user is resuming mid-list, and that offset belongs
+  // to the cached list *including* its read articles. Dropping them shortens
+  // the document, the browser clamps scrollY to the new maximum, and the user
+  // is thrown to the end of the list — which the bottom safety net below then
+  // used to read as "scrolled past everything".
   const staleReadRef = useRef<{ key: string; ids: Set<number> } | null>(null)
   if (data && staleReadRef.current?.key !== viewKey) {
+    const resuming = getSavedScrollPosition(location.pathname) > 0
     staleReadRef.current = {
       key: viewKey,
-      ids: new Set(data.flatMap(p => p.articles).filter(a => a.seen_at).map(a => a.id)),
+      ids: resuming
+        ? new Set<number>()
+        : new Set(data.flatMap(p => p.articles).filter(a => a.seen_at).map(a => a.id)),
     }
   }
 
@@ -484,13 +495,20 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   // every freshly arrived article as read the instant the user returns to a
   // category. wheel/touchmove/keydown are used instead of `scroll` because a
   // programmatic window.scrollTo also emits `scroll`, but never these.
-  const hasUserScrolledRef = useRef(false)
+  //
+  // The gesture is tracked as a timestamp, not a sticky flag: a flag set once
+  // early in the visit stays true forever and lets every later non-gesture
+  // path through — the exact hole that mass-marked a category read when the
+  // document shrank hours later and the browser clamped scrollY to the bottom.
+  const lastUserScrollAtRef = useRef(0)
+  const lastScrollHeightRef = useRef(0)
   useEffect(() => {
-    hasUserScrolledRef.current = false
+    lastUserScrollAtRef.current = 0
+    lastScrollHeightRef.current = 0
   }, [viewKey])
 
   useEffect(() => {
-    const onUserScroll = () => { hasUserScrolledRef.current = true }
+    const onUserScroll = () => { lastUserScrollAtRef.current = Date.now() }
     window.addEventListener('wheel', onUserScroll, { passive: true })
     window.addEventListener('touchmove', onUserScroll, { passive: true })
     window.addEventListener('keydown', onUserScroll)
@@ -507,10 +525,20 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     if (!list) return
 
     const BOTTOM_THRESHOLD = 4
+    /** How long after a gesture a bottom position still counts as user-driven. */
+    const GESTURE_WINDOW = 2000
 
     const checkBottom = () => {
-      if (!hasUserScrolledRef.current) return
       const docHeight = document.documentElement.scrollHeight
+      const prevHeight = lastScrollHeightRef.current
+      lastScrollHeightRef.current = docHeight
+      // The list just changed length under the user (a page arrived, a
+      // revalidation dropped read articles, the stale-read filter applied).
+      // The browser clamps scrollY to the new maximum, so "at bottom" here
+      // means the page moved, not the user. Re-baseline and wait for the next
+      // real gesture.
+      if (docHeight !== prevHeight) return
+      if (Date.now() - lastUserScrollAtRef.current > GESTURE_WINDOW) return
       // Nothing to scroll past — don't mark articles the user never moved by.
       if (docHeight - window.innerHeight <= BOTTOM_THRESHOLD) return
       if (docHeight - (window.scrollY + window.innerHeight) > BOTTOM_THRESHOLD) return
