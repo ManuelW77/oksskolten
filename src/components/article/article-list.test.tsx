@@ -442,7 +442,10 @@ describe('ArticleList', () => {
       isValidating: false,
       mutate: vi.fn(),
     }
-    renderArticleList()
+    // /history, not /inbox: unread-focused views drop articles that were
+    // already read when the view was entered, so a read article would not
+    // render there at all.
+    renderArticleList('/history')
     const unreadEl = document.querySelector('[data-article-id="1"]')
     const readEl = document.querySelector('[data-article-id="2"]')
     expect(unreadEl?.getAttribute('data-article-unread')).toBe('1')
@@ -454,6 +457,16 @@ describe('ArticleList', () => {
       Object.defineProperty(document.documentElement, 'scrollHeight', { value: scrollHeight, configurable: true })
       Object.defineProperty(window, 'innerHeight', { value: innerHeight, configurable: true, writable: true })
       Object.defineProperty(window, 'scrollY', { value: scrollY, configurable: true, writable: true })
+    }
+
+    /**
+     * A genuine user-initiated scroll. The wheel gesture is what unlocks the
+     * bottom safety net (a programmatic window.scrollTo emits `scroll` but no
+     * wheel/touchmove), the scroll event is what the safety net listens on.
+     */
+    function userScroll() {
+      fireEvent.wheel(window)
+      fireEvent.scroll(window)
     }
 
     function loadedList() {
@@ -485,7 +498,7 @@ describe('ArticleList', () => {
       expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('1')
 
       setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 1200 })
-      fireEvent.scroll(window)
+      userScroll()
 
       expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('0')
     })
@@ -500,7 +513,7 @@ describe('ArticleList', () => {
       // Browser leaves the page a sub-pixel short of the true bottom — the very
       // case that kept the last article stuck as unread.
       setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 1197.5 })
-      fireEvent.scroll(window)
+      userScroll()
 
       expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('0')
     })
@@ -512,7 +525,7 @@ describe('ArticleList', () => {
       setScrollGeometry({ scrollHeight: 800, innerHeight: 800, scrollY: 0 })
 
       renderArticleList()
-      fireEvent.scroll(window)
+      userScroll()
 
       expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('1')
     })
@@ -524,7 +537,7 @@ describe('ArticleList', () => {
       setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 1200 })
 
       renderArticleList()
-      fireEvent.scroll(window)
+      userScroll()
 
       expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('1')
     })
@@ -535,9 +548,75 @@ describe('ArticleList', () => {
       setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 1200 })
 
       renderArticleList()
+      userScroll()
+
+      expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('1')
+    })
+
+    // Regression: returning to a category that was read empty and has since
+    // received new articles. Scroll restoration puts the window at the bottom
+    // position saved for the old list; without a user gesture the safety net
+    // must not treat that as "scrolled past everything".
+    it('does not mark articles read when scroll position was restored programmatically', () => {
+      mockSettings.autoMarkRead = 'on' as any
+      loadedList()
+      setScrollGeometry({ scrollHeight: 2000, innerHeight: 800, scrollY: 1200 })
+
+      renderArticleList()
+      // A programmatic window.scrollTo emits `scroll` but no wheel/touchmove.
       fireEvent.scroll(window)
 
       expect(document.querySelector('[data-article-id="2"]')?.getAttribute('data-article-unread')).toBe('1')
+    })
+  })
+
+  describe('stale read articles on view entry', () => {
+    it('hides articles that were already read when an unread-only view is entered', () => {
+      swrInfiniteReturn = {
+        data: [{
+          articles: [
+            makeArticle({ id: 1, title: 'Read Earlier', seen_at: '2026-01-01' }),
+            makeArticle({ id: 2, title: 'New Article', seen_at: null }),
+          ],
+          total: 2,
+          has_more: false,
+        }],
+        error: undefined,
+        size: 1,
+        setSize: vi.fn(),
+        isLoading: false,
+        isValidating: false,
+        mutate: vi.fn(),
+      }
+
+      renderArticleList('/inbox')
+
+      expect(screen.queryByText('Read Earlier')).toBeNull()
+      expect(screen.getByText('New Article')).toBeTruthy()
+    })
+
+    it('keeps showing read articles in views that are not unread-only', () => {
+      swrInfiniteReturn = {
+        data: [{
+          articles: [
+            makeArticle({ id: 1, title: 'Read Earlier', seen_at: '2026-01-01' }),
+            makeArticle({ id: 2, title: 'New Article', seen_at: null }),
+          ],
+          total: 2,
+          has_more: false,
+        }],
+        error: undefined,
+        size: 1,
+        setSize: vi.fn(),
+        isLoading: false,
+        isValidating: false,
+        mutate: vi.fn(),
+      }
+
+      renderArticleList('/history')
+
+      expect(screen.getByText('Read Earlier')).toBeTruthy()
+      expect(screen.getByText('New Article')).toBeTruthy()
     })
   })
 

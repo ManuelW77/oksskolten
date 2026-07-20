@@ -125,7 +125,40 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     revalidate: () => mutate(),
   }), [mutate])
 
-  const articles = useMemo(() => data ? data.flatMap(page => page.articles) : [], [data])
+  // Identity of the currently displayed list. The component stays mounted
+  // across feed/category/label switches (the route's motion.div is keyed by
+  // page type, not pathname), so per-view state must be reset off this key
+  // rather than relying on unmount.
+  const viewKey = `${feedId ?? ''}|${categoryId ?? ''}|${labelId ?? ''}|${location.pathname}`
+
+  // Articles already read before this view was entered.
+  //
+  // On (re)entry the SWR cache still holds the previous response for this key,
+  // including articles that were read during an earlier visit. Rendering them
+  // flashes a stale list, and scroll restoration then lands the user at a
+  // bottom position belonging to a list that no longer exists. Snapshot those
+  // ids once per view and drop them from the rendered list. Articles read
+  // during *this* visit are not in the snapshot, so they stay in place and the
+  // list never shifts under the user mid-scroll.
+  const staleReadRef = useRef<{ key: string; ids: Set<number> } | null>(null)
+  if (data && staleReadRef.current?.key !== viewKey) {
+    staleReadRef.current = {
+      key: viewKey,
+      ids: new Set(data.flatMap(p => p.articles).filter(a => a.seen_at).map(a => a.id)),
+    }
+  }
+
+  const unreadFocused = unreadOnly || (isLabel && labelUnreadOnly === 'on')
+
+  const articles = useMemo(() => {
+    const all = data ? data.flatMap(page => page.articles) : []
+    const stale = staleReadRef.current?.ids
+    if (!unreadFocused || !stale?.size) return all
+    return all.filter(a => !stale.has(a.id))
+    // viewKey is not read in the body but staleReadRef is rebuilt whenever it
+    // changes; without it here the memo would keep the previous view's filter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, unreadFocused, viewKey])
   const hasMore = data ? data[data.length - 1]?.has_more ?? false : false
   const isEmpty = data?.[0]?.articles.length === 0
   const totalAll = data?.[0]?.total_all
@@ -444,6 +477,30 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   // stays unread forever. Once the list is fully loaded, reaching the bottom of
   // the page means every article has been scrolled past — mark whatever is
   // still unread as read.
+  // The safety net may only fire in response to a real user scroll gesture.
+  // Without that guard it also runs when the effect merely re-ran (it does so
+  // after every settled fetch) or when scroll restoration teleported the window
+  // to a position saved for an older version of this list — which would mark
+  // every freshly arrived article as read the instant the user returns to a
+  // category. wheel/touchmove/keydown are used instead of `scroll` because a
+  // programmatic window.scrollTo also emits `scroll`, but never these.
+  const hasUserScrolledRef = useRef(false)
+  useEffect(() => {
+    hasUserScrolledRef.current = false
+  }, [viewKey])
+
+  useEffect(() => {
+    const onUserScroll = () => { hasUserScrolledRef.current = true }
+    window.addEventListener('wheel', onUserScroll, { passive: true })
+    window.addEventListener('touchmove', onUserScroll, { passive: true })
+    window.addEventListener('keydown', onUserScroll)
+    return () => {
+      window.removeEventListener('wheel', onUserScroll)
+      window.removeEventListener('touchmove', onUserScroll)
+      window.removeEventListener('keydown', onUserScroll)
+    }
+  }, [])
+
   useEffect(() => {
     if (!isAutoMarkEnabled || isCollectionView || hasMore || isValidating) return
     const list = listRef.current
@@ -452,6 +509,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     const BOTTOM_THRESHOLD = 4
 
     const checkBottom = () => {
+      if (!hasUserScrolledRef.current) return
       const docHeight = document.documentElement.scrollHeight
       // Nothing to scroll past — don't mark articles the user never moved by.
       if (docHeight - window.innerHeight <= BOTTOM_THRESHOLD) return
@@ -534,7 +592,12 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
         <FeedMetricsBar feed={currentFeed} />
       )}
 
-      {isLoading && <ArticleListSkeleton layout={layout} showThumbnails={displayConfig.showThumbnails} />}
+      {/* Also show the skeleton when the cached list was fully filtered out as
+          stale-read and the fresh list is still in flight, so the view doesn't
+          flash empty before the new articles arrive. */}
+      {(isLoading || (articles.length === 0 && !isEmpty && isValidating)) && (
+        <ArticleListSkeleton layout={layout} showThumbnails={displayConfig.showThumbnails} />
+      )}
 
       {error && (
         <div className="text-center py-12">
