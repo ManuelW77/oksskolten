@@ -7,6 +7,7 @@ import {
   flattenWrapperElements,
   stripUnwantedAttributes,
   removeEmptyElements,
+  removeNoiseLeafParagraphs,
   stripExtraBrElements,
 } from './html-normalizer.js'
 import { ALLOWED_ATTRIBUTES, ALLOWED_EMPTY_ELEMENTS } from './selectors.js'
@@ -229,6 +230,62 @@ describe('removeEmptyElements', () => {
 })
 
 // ---------------------------------------------------------------------------
+// removeNoiseLeafParagraphs
+// ---------------------------------------------------------------------------
+describe('removeNoiseLeafParagraphs', () => {
+  it('removes a paragraph containing only a single emoji', () => {
+    const { body } = bodyEl('<p>👏️</p><p>real content</p>')
+    removeNoiseLeafParagraphs(body)
+    expect(body.querySelectorAll('p')).toHaveLength(1)
+    expect(body.textContent).toContain('real content')
+  })
+
+  it('removes multiple stray emoji-reaction paragraphs', () => {
+    const { body } = bodyEl(
+      '<p>❤️️</p><p>😂️</p><p>😱️</p><p>🔥️</p><p>😥️</p><p>👏️</p><p>Article text.</p>',
+    )
+    removeNoiseLeafParagraphs(body)
+    expect(body.querySelectorAll('p')).toHaveLength(1)
+    expect(body.textContent).toBe('Article text.')
+  })
+
+  it('removes a bare date/time paragraph', () => {
+    const { body } = bodyEl('<p>18.08.2026 07:03</p><p>real content</p>')
+    removeNoiseLeafParagraphs(body)
+    expect(body.querySelectorAll('p')).toHaveLength(1)
+    expect(body.textContent).toContain('real content')
+  })
+
+  it('keeps a paragraph that mixes emoji with real text', () => {
+    const { body } = bodyEl('<p>👏️ Great article!</p>')
+    removeNoiseLeafParagraphs(body)
+    expect(body.querySelectorAll('p')).toHaveLength(1)
+    expect(body.textContent).toBe('👏️ Great article!')
+  })
+
+  it('keeps a sentence that happens to mention a date', () => {
+    const { body } = bodyEl('<p>Published on 18.08.2026 07:03 in Berlin.</p>')
+    removeNoiseLeafParagraphs(body)
+    expect(body.querySelectorAll('p')).toHaveLength(1)
+  })
+
+  it('keeps paragraphs with element children (e.g. images, links)', () => {
+    const { body } = bodyEl('<p><img src="/x.jpg" alt="x"></p>')
+    removeNoiseLeafParagraphs(body)
+    expect(body.querySelectorAll('p')).toHaveLength(1)
+  })
+
+  it('removes nested emoji-only span, cleaning the now-empty parent via removeEmptyElements', () => {
+    const { body } = bodyEl('<div class="wrapper"><span>👏️</span></div><p>content</p>')
+    removeNoiseLeafParagraphs(body)
+    removeEmptyElements(body, ALLOWED_EMPTY_ELEMENTS)
+    expect(body.querySelector('span')).toBeNull()
+    expect(body.querySelector('div')).toBeNull()
+    expect(body.textContent).toBe('content')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // stripExtraBrElements
 // ---------------------------------------------------------------------------
 describe('stripExtraBrElements', () => {
@@ -318,5 +375,26 @@ describe('normalizeHtml', () => {
         allowedEmptyElements: ALLOWED_EMPTY_ELEMENTS,
       }),
     ).not.toThrow()
+  })
+
+  it('strips reaction-widget residue left behind after wrapper-div flattening (tag24.de regression)', () => {
+    // No class survives on the widget's own <div> at this stage — only its
+    // <p> children are left, which is why a selector-based removal alone
+    // can't catch this; it relies on flattenWrapperElements unwrapping the
+    // div and this step catching the orphaned emoji/date paragraphs.
+    const { doc, body } = bodyEl(
+      '<div>' +
+      '<p>18.08.2026 07:03</p>' +
+      '<p>❤️️</p><p>😂️</p><p>😱️</p><p>🔥️</p><p>😥️</p><p>👏️</p>' +
+      '<p>Real article paragraph about something interesting.</p>' +
+      '</div>',
+    )
+    normalizeHtml(doc, body, {
+      allowedAttributes: ALLOWED_ATTRIBUTES,
+      allowedEmptyElements: ALLOWED_EMPTY_ELEMENTS,
+    })
+
+    expect(body.querySelectorAll('p')).toHaveLength(1)
+    expect(body.textContent).toBe('Real article paragraph about something interesting.')
   })
 })

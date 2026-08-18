@@ -1,0 +1,20 @@
+{
+  "name": "de-tag24-reactions",
+  "url": "https://www.tag24.de/unterhaltung/tv/hartz-und-herzlich/example-3524000",
+  "lang": "de",
+  "keySentences": [
+    "Bei Hartz und herzlich-Protagonist Maik (23) stehen weitreichende Veraenderungen an",
+    "Erst vor wenigen Tagen sind Maik und Jasmin aus dem Eltern-Kind-Heim ausgezogen",
+    "Gleichzeitig sieht es fuer den Familienvater gut auf dem Arbeitsmarkt aus",
+    "Maik freut sich zwar ueber die Taetigkeit"
+  ],
+  "knownNoise": [
+    "18.08.2026 07:03",
+    "❤️️",
+    "😂️",
+    "😱️",
+    "🔥️",
+    "😥️",
+    "👏️"
+  ]
+}

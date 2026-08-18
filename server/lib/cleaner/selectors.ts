@@ -38,6 +38,10 @@ export const PRE_CLEAN_SELECTORS: string[] = [
 
   // Embeds that are never content
   'instaread-player',
+
+  // Reaction/emoji-vote widgets (e.g. "article__reactions") — never content,
+  // and their bare <p> children survive flattenWrapperElements if left in place
+  '[class*="reactions" i]',
 ]
 
 // ---------------------------------------------------------------------------

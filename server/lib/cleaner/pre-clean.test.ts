@@ -79,6 +79,16 @@ describe('preClean', () => {
       const doc = preCleanHtml('<body><canvas></canvas><p>text</p></body>', 'https://example.com')
       expect(doc.querySelectorAll('canvas')).toHaveLength(0)
     })
+
+    it('removes reaction-widget divs (e.g. article__reactions)', () => {
+      const doc = preCleanHtml(
+        '<body><div class="article__reactions"><span class="reaction__icon">👏</span></div><p>text</p></body>',
+        'https://example.com',
+      )
+      expect(doc.querySelectorAll('.article__reactions')).toHaveLength(0)
+      expect(doc.body.textContent).not.toContain('👏')
+      expect(doc.body.textContent).toContain('text')
+    })
   })
 
   describe('preserves content elements', () => {

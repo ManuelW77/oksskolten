@@ -29,6 +29,8 @@ export function normalizeHtml(
   stripUnwantedAttributes(element, options.allowedAttributes)
   removeEmptyElements(element, options.allowedEmptyElements)
   flattenWrapperElements(element, doc) // 2nd pass: re-flatten after empty removal
+  removeNoiseLeafParagraphs(element)
+  removeEmptyElements(element, options.allowedEmptyElements) // clean up parents left empty by noise removal
   stripExtraBrElements(element)
 }
 
@@ -120,6 +122,45 @@ export function flattenWrapperElements(element: Element, doc: Document): void {
         frag.appendChild(div.firstChild)
       }
       parent.replaceChild(frag, div)
+    }
+  }
+}
+
+/**
+ * Matches text made up entirely of emoji/symbol characters (plus variation
+ * selectors, ZWJ, and skin-tone modifiers) — e.g. leftover reaction-widget
+ * paragraphs like "👏️" or "❤️️😂️😱️".
+ */
+const EMOJI_ONLY_PATTERN = /^[\s\p{Extended_Pictographic}\u200D\uFE0F\u{1F3FB}-\u{1F3FF}]+$/u
+
+/**
+ * Matches a bare date/time stamp with no surrounding sentence context,
+ * e.g. "18.08.2026 07:03" — leftover from a reaction/metadata widget.
+ */
+const BARE_DATE_TIME_PATTERN = /^\d{1,2}\.\d{1,2}\.\d{4}\s+\d{1,2}:\d{2}$/
+
+/**
+ * Remove leaf paragraphs/spans/list items whose entire text content is
+ * either emoji-only or a bare date/time stamp. These are typically residue
+ * from a reaction-widget or metadata `<div>` whose wrapper carried no
+ * distinguishing class and got unwrapped by flattenWrapperElements,
+ * leaving its children stranded inside the article content.
+ * Only applies to elements with no child elements, so real sentences that
+ * happen to contain an emoji or a date are left untouched.
+ */
+export function removeNoiseLeafParagraphs(element: Element): void {
+  const candidates = Array.from(element.querySelectorAll('p, span, li'))
+  candidates.reverse() // deepest/innermost elements first
+
+  for (const el of candidates) {
+    if (!el.parentNode) continue
+    if (el.children.length > 0) continue
+
+    const text = (el.textContent || '').trim()
+    if (text === '') continue
+
+    if (EMOJI_ONLY_PATTERN.test(text) || BARE_DATE_TIME_PATTERN.test(text)) {
+      el.remove()
     }
   }
 }
