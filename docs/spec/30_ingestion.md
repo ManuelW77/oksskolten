@@ -125,6 +125,14 @@ When the fallback triggers, the RSS content is only used if it is more substanti
 
 This addresses SPA sites where even FlareSolverr returns rendered HTML but `preClean` removes `display: none` elements, leaving Readability with an effectively empty DOM — while the RSS feed itself often contains the full article content (as used by readers like Feedly).
 
+**Unreliable Content Detection (`hasReliableFullText`)**: Even after the RSS fallback, `full_text` can still end up shorter than `MIN_EXTRACTED_LENGTH` (e.g. feeds that only publish a short excerpt). `hasReliableFullText()` in `server/fetcher/content.ts` checks this (whitespace-collapsed length >= 200 chars) and is used to:
+
+- Skip auto-summarization (`autoSummarizeIfNeeded` in `server/fetcher/label-summarize.ts`)
+- Reject on-demand summarization with `400 CONTENT_TOO_SHORT` (`POST /api/articles/:id/summarize`, `summarize_article`/`summarize_articles` chat tools)
+- Show an "incomplete content" banner in the article detail view (`ArticleIncompleteContentBanner`) instead of silently displaying a truncated excerpt
+
+This prevents the AI from fabricating plausible-sounding details to fill out a summary when there isn't enough source text to work with.
+
 ### Full-Text Retrieval and Markdown Conversion Pipeline
 
 End-to-end flow from article URL to Markdown text. A multi-stage pipeline combining HTML cleaning (defuddle-based) and Readability that removes noise such as ads, navigation, and tracking attributes before converting to Markdown. Runs entirely locally with no external API dependencies.

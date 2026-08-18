@@ -1,11 +1,12 @@
 import { getAutoSummarizeCandidates, updateArticleContent } from '../db.js'
 import { summarizeArticle } from './ai.js'
+import { hasReliableFullText } from './content.js'
 import { logger } from '../logger.js'
 
 const log = logger.child('label-summarize')
 
 export async function autoSummarizeIfNeeded(articleId: number, fullText: string | null): Promise<void> {
-  if (!fullText) return
+  if (!hasReliableFullText(fullText)) return
 
   try {
     const shouldSummarize = getAutoSummarizeCandidates(articleId)

@@ -67,7 +67,7 @@ beforeEach(async () => {
 describe('POST /api/articles/:id/summarize?stream=1', () => {
   it('returns SSE stream with delta and done events', async () => {
     const feed = seedFeed()
-    const artId = seedArticle(feed.id, { full_text: 'Long article content here' })
+    const artId = seedArticle(feed.id, { full_text: 'Long article content here. '.repeat(10) })
 
     mockStreamSummarize.mockImplementation(async (_text: string, onDelta: (d: string) => void) => {
       onDelta('sum')
@@ -118,7 +118,7 @@ describe('POST /api/articles/:id/summarize?stream=1', () => {
 
   it('handles streaming error after headers sent', async () => {
     const feed = seedFeed()
-    const artId = seedArticle(feed.id, { full_text: 'Long content' })
+    const artId = seedArticle(feed.id, { full_text: 'Long content. '.repeat(15) })
 
     mockStreamSummarize.mockRejectedValue(new Error('API timeout'))
 

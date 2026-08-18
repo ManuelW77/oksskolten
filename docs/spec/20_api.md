@@ -530,7 +530,7 @@ Maximum 100 items. Only updates articles where `seen_at IS NULL`.
 
 **POST /api/articles/:id/summarize** — Article summary (on-demand)
 
-Returns the cached summary if one already exists. Returns `400` if `full_text` is NULL.
+Returns the cached summary if one already exists. Returns `400` if `full_text` is NULL, or if it is shorter than `MIN_EXTRACTED_LENGTH` (200 chars, `CONTENT_TOO_SHORT`) — too little text to summarize reliably.
 
 Query parameter `stream=1` for SSE streaming response:
 

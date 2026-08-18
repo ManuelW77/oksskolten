@@ -719,7 +719,7 @@ describe('POST /api/articles/:id/summarize', () => {
 
   it('generates summary via AI when not cached', async () => {
     const feed = seedFeed()
-    const artId = seedArticle(feed.id, { full_text: 'Long article content' })
+    const artId = seedArticle(feed.id, { full_text: 'Long article content. '.repeat(15) })
 
     const res = await app.inject({
       method: 'POST',

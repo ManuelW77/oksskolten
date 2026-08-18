@@ -81,6 +81,17 @@ async function runWithTimeout(input: ParseHtmlInput, timeoutMs: number): Promise
 export const MIN_EXTRACTED_LENGTH = 200
 
 /**
+ * Whether `fullText` is substantial enough to be treated as real article
+ * content rather than a short RSS-excerpt fallback. Summarizing text below
+ * this threshold gives the AI too little to work with — it tends to
+ * fabricate plausible-sounding details to fill out the expected format
+ * rather than reporting that it doesn't know.
+ */
+export function hasReliableFullText(fullText: string | null | undefined): fullText is string {
+  return !!fullText && fullText.replace(/\s+/g, ' ').trim().length >= MIN_EXTRACTED_LENGTH
+}
+
+/**
  * Strip heavy non-content tags before passing HTML to the worker thread.
  * This runs on the main thread with simple regex (no DOM parsing), so it's fast.
  * Removes clearly non-content shells before Readability to reduce parse time.

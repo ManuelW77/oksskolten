@@ -308,7 +308,7 @@ describe('summarize_article', () => {
 
   it('generates summary when not cached', async () => {
     const feed = seedFeed()
-    const id = seedArticle(feed.id, { full_text: 'Some article text' })
+    const id = seedArticle(feed.id, { full_text: 'Some article text. '.repeat(12) })
 
     const result = JSON.parse(await executeTool('summarize_article', { article_id: id }))
     expect(result.summary).toBe('Mocked summary')
@@ -331,7 +331,7 @@ describe('summarize_articles', () => {
   it('returns cached and new summaries', async () => {
     const feed = seedFeed()
     const id1 = seedArticle(feed.id, { url: 'https://example.com/s1', full_text: 'text 1', summary: 'Cached 1' })
-    const id2 = seedArticle(feed.id, { url: 'https://example.com/s2', full_text: 'text 2' })
+    const id2 = seedArticle(feed.id, { url: 'https://example.com/s2', full_text: 'text 2. '.repeat(30) })
 
     const result = JSON.parse(await executeTool('summarize_articles', { article_ids: [id1, id2] }))
     expect(result).toHaveLength(2)

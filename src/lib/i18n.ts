@@ -151,6 +151,11 @@ const dict = {
   'article.viewingOriginal': { ja: '原文を表示中', en: 'Viewing original', de: 'Original wird angezeigt' },
   'article.switchToOriginal': { ja: '原文に切替 →', en: 'Switch to original →', de: 'Zum Original wechseln →' },
   'article.switchToTranslation': { ja: '日本語訳に切替 →', en: 'Switch to translation →', de: 'Zur Übersetzung wechseln →' },
+  'article.incompleteContent': {
+    ja: '記事の全文を取得できませんでした。フィードの抜粋を表示しています。',
+    en: "Full article content couldn't be loaded — showing the feed excerpt instead.",
+    de: 'Voller Artikelinhalt konnte nicht geladen werden — zeigt den Feed-Auszug.',
+  },
   'article.addBookmark': { ja: '後で読む', en: 'Read later', de: 'Später lesen' },
   'article.removeBookmark': { ja: '後で読むを解除', en: 'Remove from read later', de: 'Aus „Später lesen" entfernen' },
   'article.addLike': { ja: 'いいね', en: 'Like', de: 'Gefällt mir' },
@@ -862,6 +867,11 @@ const dict = {
     en: 'Translation failed. Please try again later.',
     de: 'Übersetzung fehlgeschlagen. Bitte versuche es später erneut.',
   },
+  'error.contentTooShort': {
+    ja: '記事の全文を取得できなかったため、信頼できる要約を作成できません。',
+    en: "The full article content couldn't be retrieved, so a reliable summary can't be generated.",
+    de: 'Der vollständige Artikelinhalt konnte nicht geladen werden — keine zuverlässige Zusammenfassung möglich.',
+  },
   'error.goToSettings': {
     ja: '設定画面',
     en: 'Settings',
@@ -942,6 +952,7 @@ const errorCodeMap: Record<string, MessageKey> = {
   DEEPL_KEY_NOT_SET: 'error.deeplKeyNotSet',
   SUMMARIZATION_FAILED: 'error.summarizationFailed',
   TRANSLATION_FAILED: 'error.translationFailed',
+  CONTENT_TOO_SHORT: 'error.contentTooShort',
 }
 
 interface LocaleContextValue {

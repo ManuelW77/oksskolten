@@ -25,6 +25,7 @@ import { ArticleZapNavigation } from './article-zap-navigation'
 import { ArticleToolbar } from './article-toolbar'
 import { ArticleSummarySection } from './article-summary-section'
 import { ArticleTranslationBanner } from './article-translation-banner'
+import { ArticleIncompleteContentBanner } from './article-incomplete-content-banner'
 import { ArticleContentBody } from './article-content-body'
 import { ArticleSimilarBanner } from './article-similar-banner'
 import type { ArticleDetail as ArticleDetailData } from '../../../shared/types'
@@ -33,6 +34,9 @@ interface ArticleDetailProps {
   articleUrl: string
   enableZapNavigation?: boolean
 }
+
+/** Mirrors MIN_EXTRACTED_LENGTH in server/fetcher/content.ts */
+const MIN_RELIABLE_CONTENT_LENGTH = 200
 
 export function ArticleDetail({ articleUrl, enableZapNavigation = false }: ArticleDetailProps) {
   const { settings: { internalLinks, chatPosition, translateTargetLang } } = useAppLayout()
@@ -269,6 +273,11 @@ export function ArticleDetail({ articleUrl, enableZapNavigation = false }: Artic
           viewMode={viewMode}
           onToggle={() => setViewMode(viewMode === 'translated' ? 'original' : 'translated')}
         />
+      )}
+
+      {/* Incomplete content banner */}
+      {article.full_text != null && article.full_text.replace(/\s+/g, ' ').trim().length < MIN_RELIABLE_CONTENT_LENGTH && (
+        <ArticleIncompleteContentBanner />
       )}
 
       {/* Content */}
