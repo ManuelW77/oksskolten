@@ -86,8 +86,13 @@ export const MIN_EXTRACTED_LENGTH = 200
  * this threshold gives the AI too little to work with — it tends to
  * fabricate plausible-sounding details to fill out the expected format
  * rather than reporting that it doesn't know.
+ *
+ * `isExcerptOnly` (the article's `full_text_is_excerpt` column) always wins
+ * over the length check: an RSS teaser can coincidentally be long enough to
+ * pass MIN_EXTRACTED_LENGTH while still not being the actual article body.
  */
-export function hasReliableFullText(fullText: string | null | undefined): fullText is string {
+export function hasReliableFullText(fullText: string | null | undefined, isExcerptOnly?: boolean | number): fullText is string {
+  if (isExcerptOnly) return false
   return !!fullText && fullText.replace(/\s+/g, ' ').trim().length >= MIN_EXTRACTED_LENGTH
 }
 

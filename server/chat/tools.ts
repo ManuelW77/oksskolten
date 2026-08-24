@@ -281,7 +281,7 @@ const summarizeArticleTool: ToolDef = {
     if (!article) return JSON.stringify({ error: 'Article not found' })
     if (article.summary) return JSON.stringify({ summary: article.summary, cached: true })
     if (!article.full_text) return JSON.stringify({ error: 'No full text available' })
-    if (!hasReliableFullText(article.full_text)) return JSON.stringify({ error: 'Article content is too short/incomplete for a reliable summary' })
+    if (!hasReliableFullText(article.full_text, article.full_text_is_excerpt)) return JSON.stringify({ error: 'Article content is too short/incomplete for a reliable summary' })
 
     const { summary } = await summarizeArticle(article.full_text)
     updateArticleContent(article.id, { summary })
@@ -312,7 +312,7 @@ const summarizeArticlesTool: ToolDef = {
         if (!article) return { id, error: 'Article not found' }
         if (article.summary) return { id, summary: article.summary, cached: true }
         if (!article.full_text) return { id, error: 'No full text available' }
-        if (!hasReliableFullText(article.full_text)) return { id, error: 'Article content is too short/incomplete for a reliable summary' }
+        if (!hasReliableFullText(article.full_text, article.full_text_is_excerpt)) return { id, error: 'Article content is too short/incomplete for a reliable summary' }
 
         try {
           const { summary } = await summarizeArticle(article.full_text)

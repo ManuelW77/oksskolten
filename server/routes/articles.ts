@@ -459,7 +459,7 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
     { preHandler: [requireJson] },
     createAiHandler({
       getCached: (article) => article.summary,
-      validate: (article) => (hasReliableFullText(article.full_text) ? null : 'CONTENT_TOO_SHORT'),
+      validate: (article) => (hasReliableFullText(article.full_text, article.full_text_is_excerpt) ? null : 'CONTENT_TOO_SHORT'),
       streamFn: async (fullText, onDelta) => {
         const r = await streamSummarizeArticle(fullText, onDelta)
         return { text: r.summary, ...r }

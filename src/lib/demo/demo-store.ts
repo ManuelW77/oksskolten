@@ -200,6 +200,7 @@ function toArticleDetail(a: SeedArticle): ArticleDetail {
   return {
     ...toArticleListItem(a),
     full_text: a.full_text,
+    full_text_is_excerpt: 0,
     full_text_translated: translatedIds.has(a.id) ? (a.full_text_translated ?? null) : null,
     translated_lang: translatedIds.has(a.id) ? getLocale() : null,
     images_archived_at: null,

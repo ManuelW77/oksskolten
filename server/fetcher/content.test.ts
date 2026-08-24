@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { parseHtml } from './contentWorker.js'
-import { extractAnchoredContentHtml, isBotBlockPage, stripHeavyTags } from './content.js'
+import { extractAnchoredContentHtml, isBotBlockPage, stripHeavyTags, hasReliableFullText } from './content.js'
 import { convertHtmlToMarkdown, markdownToExcerpt } from './markdown-utils.js'
 
 // ---------------------------------------------------------------------------
@@ -420,6 +420,35 @@ describe('isBotBlockPage', () => {
   it('detects pattern embedded in larger HTML text', () => {
     const html = '<div class="wrapper"><h1>Security Check</h1><p>Please verify you are a human to continue browsing.</p></div>'
     expect(isBotBlockPage(html)).toBe(true)
+  })
+})
+
+describe('hasReliableFullText', () => {
+  it('returns true for text at or above MIN_EXTRACTED_LENGTH', () => {
+    expect(hasReliableFullText('a'.repeat(200))).toBe(true)
+  })
+
+  it('returns false for text below MIN_EXTRACTED_LENGTH', () => {
+    expect(hasReliableFullText('a'.repeat(199))).toBe(false)
+  })
+
+  it('returns false for null/undefined', () => {
+    expect(hasReliableFullText(null)).toBe(false)
+    expect(hasReliableFullText(undefined)).toBe(false)
+  })
+
+  it('returns false when isExcerptOnly is true, even if long enough', () => {
+    // A multi-sentence RSS teaser can coincidentally exceed MIN_EXTRACTED_LENGTH
+    // while still not being the article's actual body.
+    expect(hasReliableFullText('a'.repeat(300), true)).toBe(false)
+  })
+
+  it('returns false when isExcerptOnly is 1 (DB integer flag)', () => {
+    expect(hasReliableFullText('a'.repeat(300), 1)).toBe(false)
+  })
+
+  it('returns true when isExcerptOnly is 0 (DB integer flag) and long enough', () => {
+    expect(hasReliableFullText('a'.repeat(300), 0)).toBe(true)
   })
 })
 

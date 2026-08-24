@@ -276,7 +276,10 @@ export function ArticleDetail({ articleUrl, enableZapNavigation = false }: Artic
       )}
 
       {/* Incomplete content banner */}
-      {article.full_text != null && article.full_text.replace(/\s+/g, ' ').trim().length < MIN_RELIABLE_CONTENT_LENGTH && (
+      {article.full_text != null && (
+        !!article.full_text_is_excerpt ||
+        article.full_text.replace(/\s+/g, ' ').trim().length < MIN_RELIABLE_CONTENT_LENGTH
+      ) && (
         <ArticleIncompleteContentBanner />
       )}
 

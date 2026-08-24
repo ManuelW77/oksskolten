@@ -45,6 +45,7 @@ export interface Article {
   published_at: string | null
   lang: string | null
   full_text: string | null
+  full_text_is_excerpt: number
   full_text_translated: string | null
   translated_lang: string | null
   summary: string | null
@@ -81,6 +82,7 @@ export interface ArticleListItem {
 
 export interface ArticleDetail extends ArticleListItem {
   full_text: string | null
+  full_text_is_excerpt: number
   full_text_translated: string | null
   translated_lang: string | null
   images_archived_at: string | null

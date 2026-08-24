@@ -70,6 +70,7 @@ function refreshStaleArticles(feedId: number, rssItems: RssItem[]): void {
     if (md && mdLen > currentLen) {
       updateArticleContent(candidate.id, {
         full_text: md,
+        full_text_is_excerpt: 1,
         excerpt: markdownToExcerpt(md),
         // The old full_text was garbage, so any derived summary or
         // translation produced from it is also garbage. Clear them so
@@ -95,6 +96,8 @@ function refreshStaleArticles(feedId: number, rssItems: RssItem[]): void {
 
 export interface FetchedContent {
   fullText: string | null
+  /** True when fullText came from the RSS excerpt fallback rather than genuine page extraction */
+  isExcerptFallback: boolean
   ogImage: string | null
   excerpt: string | null
   lang: string | null
@@ -114,6 +117,7 @@ export async function fetchArticleContent(
   },
 ): Promise<FetchedContent> {
   let fullText: string | null = null
+  let isExcerptFallback = false
   let ogImage: string | null = null
   let excerpt: string | null = null
   let lang: string | null = null
@@ -160,6 +164,7 @@ export async function fetchArticleContent(
       if (mdLen > extractedLen) {
         log.info({ url, extractedLen, rssLen: mdLen }, 'using RSS feed content as fallback')
         fullText = md
+        isExcerptFallback = true
         excerpt = markdownToExcerpt(md)
         lastError = null
       }
@@ -173,7 +178,7 @@ export async function fetchArticleContent(
     lang = existing.lang
   }
 
-  return { fullText, ogImage, excerpt, lang, lastError, title }
+  return { fullText, isExcerptFallback, ogImage, excerpt, lang, lastError, title }
 }
 
 // --- Article processing ---
@@ -218,6 +223,7 @@ async function processArticle(task: ArticleTask): Promise<boolean> {
         published_at: task.published_at,
         lang: effectiveLang,
         full_text: content.fullText,
+        full_text_is_excerpt: content.isExcerptFallback ? 1 : 0,
         full_text_translated: null,
         summary: null,
         excerpt: content.excerpt,
@@ -227,7 +233,7 @@ async function processArticle(task: ArticleTask): Promise<boolean> {
       // Fire-and-forget: detect similar articles asynchronously
       void detectAndStoreSimilarArticles(articleId, task.title, task.feed_id, task.published_at)
       // Fire-and-forget: auto-summarize if article matches a label with auto_summarize=1
-      void autoSummarizeIfNeeded(articleId, content.fullText)
+      void autoSummarizeIfNeeded(articleId, content.fullText, content.isExcerptFallback)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (!msg.includes('UNIQUE constraint failed')) {
@@ -238,6 +244,7 @@ async function processArticle(task: ArticleTask): Promise<boolean> {
     updateArticleContent(task.article.id, {
       lang: effectiveLang,
       full_text: content.fullText,
+      full_text_is_excerpt: content.isExcerptFallback ? 1 : 0,
       excerpt: content.excerpt,
       og_image: content.ogImage,
       last_error: content.lastError,

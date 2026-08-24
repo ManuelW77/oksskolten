@@ -793,7 +793,7 @@ describe('fetchAllFeeds', () => {
     await fetchAllFeeds()
 
     const { getDb } = await import('./db.js')
-    const row = getDb().prepare('SELECT full_text, summary, full_text_translated, translated_lang FROM articles WHERE url = ?').get('https://example.com/stale') as { full_text: string | null; summary: string | null; full_text_translated: string | null; translated_lang: string | null }
+    const row = getDb().prepare('SELECT full_text, full_text_is_excerpt, summary, full_text_translated, translated_lang FROM articles WHERE url = ?').get('https://example.com/stale') as { full_text: string | null; full_text_is_excerpt: number; summary: string | null; full_text_translated: string | null; translated_lang: string | null }
     expect(row.full_text).toContain('proper article body')
     expect(row.full_text).not.toBe('Essay')
     // Derived data built from the old garbage body must be cleared so the
@@ -801,6 +801,8 @@ describe('fetchAllFeeds', () => {
     expect(row.summary).toBeNull()
     expect(row.full_text_translated).toBeNull()
     expect(row.translated_lang).toBeNull()
+    // Swapped-in content is still just the RSS excerpt, not real extraction
+    expect(row.full_text_is_excerpt).toBe(1)
   })
 
   it('matches RSS items to stale articles across URL encoding differences', async () => {
@@ -1795,7 +1797,7 @@ describe('fetchSingleFeed — content extraction', () => {
     await fetchSingleFeed(feed)
 
     const { getDb } = await import('./db.js')
-    const row = getDb().prepare('SELECT full_text, last_error FROM articles WHERE url = ?').get('https://example.com/spa-article') as { full_text: string | null; last_error: string | null }
+    const row = getDb().prepare('SELECT full_text, full_text_is_excerpt, last_error FROM articles WHERE url = ?').get('https://example.com/spa-article') as { full_text: string | null; full_text_is_excerpt: number; last_error: string | null }
     expect(row.full_text).toBeTruthy()
     expect(row.full_text).toContain('article content from RSS description')
     // Should be converted to Markdown (no raw HTML tags)
@@ -1803,6 +1805,8 @@ describe('fetchSingleFeed — content extraction', () => {
     expect(row.full_text).not.toContain('<a ')
     // Should not have a lingering error since fallback succeeded
     expect(row.last_error).toBeNull()
+    // Marked as excerpt-fallback so reliability checks don't treat it as a full article
+    expect(row.full_text_is_excerpt).toBe(1)
   })
 
   it('falls back to RSS description when extracted content is too short', async () => {
@@ -1836,9 +1840,10 @@ describe('fetchSingleFeed — content extraction', () => {
     await fetchSingleFeed(feed)
 
     const { getDb } = await import('./db.js')
-    const row = getDb().prepare('SELECT full_text FROM articles WHERE url = ?').get('https://example.com/short-page') as { full_text: string | null }
+    const row = getDb().prepare('SELECT full_text, full_text_is_excerpt FROM articles WHERE url = ?').get('https://example.com/short-page') as { full_text: string | null; full_text_is_excerpt: number }
     expect(row.full_text).toBeTruthy()
     expect(row.full_text).toContain('meaningful article content')
+    expect(row.full_text_is_excerpt).toBe(1)
   })
 
   it('non-Error thrown in processArticle is stringified', async () => {

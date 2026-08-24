@@ -5,8 +5,8 @@ import { logger } from '../logger.js'
 
 const log = logger.child('label-summarize')
 
-export async function autoSummarizeIfNeeded(articleId: number, fullText: string | null): Promise<void> {
-  if (!hasReliableFullText(fullText)) return
+export async function autoSummarizeIfNeeded(articleId: number, fullText: string | null, isExcerptOnly = false): Promise<void> {
+  if (!hasReliableFullText(fullText, isExcerptOnly)) return
 
   try {
     const shouldSummarize = getAutoSummarizeCandidates(articleId)

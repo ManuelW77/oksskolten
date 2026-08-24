@@ -209,7 +209,7 @@ export function getArticleByUrl(url: string): ArticleDetail | undefined {
   const stmt = db.prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, f.type AS feed_type,
            a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
-           a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
+           a.full_text, a.full_text_is_excerpt, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.images_archived_at,
            (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
     FROM active_articles a
@@ -240,7 +240,7 @@ export function getArticleById(id: number): ArticleDetail | undefined {
   return getDb().prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, f.type AS feed_type,
            a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
-           a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
+           a.full_text, a.full_text_is_excerpt, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.images_archived_at,
            (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
     FROM active_articles a
@@ -362,6 +362,7 @@ export function insertArticle(data: {
   published_at: string | null
   lang?: string | null
   full_text?: string | null
+  full_text_is_excerpt?: number
   full_text_translated?: string | null
   translated_lang?: string | null
   summary?: string | null
@@ -370,8 +371,8 @@ export function insertArticle(data: {
   last_error?: string | null
 }): number {
   const info = runNamed(`
-    INSERT INTO articles (feed_id, category_id, title, url, published_at, lang, full_text, full_text_translated, translated_lang, summary, excerpt, og_image, last_error)
-    VALUES (@feed_id, (SELECT category_id FROM feeds WHERE id = @feed_id), @title, @url, @published_at, @lang, @full_text, @full_text_translated, @translated_lang, @summary, @excerpt, @og_image, @last_error)
+    INSERT INTO articles (feed_id, category_id, title, url, published_at, lang, full_text, full_text_is_excerpt, full_text_translated, translated_lang, summary, excerpt, og_image, last_error)
+    VALUES (@feed_id, (SELECT category_id FROM feeds WHERE id = @feed_id), @title, @url, @published_at, @lang, @full_text, @full_text_is_excerpt, @full_text_translated, @translated_lang, @summary, @excerpt, @og_image, @last_error)
   `, {
     feed_id: data.feed_id,
     title: data.title,
@@ -379,6 +380,7 @@ export function insertArticle(data: {
     published_at: data.published_at,
     lang: data.lang ?? null,
     full_text: data.full_text ?? null,
+    full_text_is_excerpt: data.full_text_is_excerpt ?? 0,
     full_text_translated: data.full_text_translated ?? null,
     translated_lang: data.translated_lang ?? null,
     summary: data.summary ?? null,
@@ -408,6 +410,7 @@ export function updateArticleContent(
   data: {
     lang?: string | null
     full_text?: string | null
+    full_text_is_excerpt?: number
     full_text_translated?: string | null
     translated_lang?: string | null
     summary?: string | null
