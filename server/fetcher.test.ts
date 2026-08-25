@@ -2990,4 +2990,67 @@ describe('fetchAllFeeds — retry backoff', () => {
     expect(row.retry_count).toBe(1)
     expect(row.last_error).toBeTruthy()
   })
+
+  it('retries an excerpt-fallback article and upgrades to genuine content on success', async () => {
+    const feed = seedFeed()
+    insertArticle({
+      feed_id: feed.id,
+      title: 'Bot Blocked',
+      url: 'https://example.com/excerpt-retry-success',
+      published_at: '2024-01-01T00:00:00Z',
+      full_text: 'Short RSS teaser sentence stored earlier as a fallback.',
+      full_text_is_excerpt: 1,
+    })
+
+    const rssXml = rss20Xml('Test', [])
+    // The site is reachable now — a genuine extraction succeeds this time
+    const html = articleHtml({ title: 'Bot Blocked' })
+    mockFetch.mockImplementation((url: string | URL) => {
+      const u = url.toString()
+      if (u === feed.rss_url) return Promise.resolve(mockResponse(rssXml, { headers: { 'content-type': 'application/rss+xml' } }))
+      if (u === 'https://example.com/excerpt-retry-success') return Promise.resolve(mockResponse(html))
+      return Promise.resolve(mockResponse('', { status: 404 }))
+    })
+
+    await fetchAllFeeds()
+
+    const { getDb } = await import('./db.js')
+    const row = getDb().prepare('SELECT full_text, full_text_is_excerpt, retry_count FROM articles WHERE url = ?').get('https://example.com/excerpt-retry-success') as { full_text: string; full_text_is_excerpt: number; retry_count: number }
+    expect(row.full_text).toContain('paragraph of article content')
+    expect(row.full_text_is_excerpt).toBe(0)
+    // Real extraction succeeded — not treated as a failed retry attempt
+    expect(row.retry_count).toBe(0)
+  })
+
+  it('retries an excerpt-fallback article, keeps the stored excerpt when still blocked, and increments retry_count', async () => {
+    const feed = seedFeed()
+    insertArticle({
+      feed_id: feed.id,
+      title: 'Still Bot Blocked',
+      url: 'https://example.com/excerpt-retry-fail',
+      published_at: '2024-01-01T00:00:00Z',
+      full_text: 'Short RSS teaser sentence stored earlier as a fallback.',
+      full_text_is_excerpt: 1,
+    })
+
+    const rssXml = rss20Xml('Test', [])
+    // Site still returns a bot-check page — extraction should not regress to nothing
+    mockFetch.mockImplementation((url: string | URL) => {
+      const u = url.toString()
+      if (u === feed.rss_url) return Promise.resolve(mockResponse(rssXml, { headers: { 'content-type': 'application/rss+xml' } }))
+      if (u === 'https://example.com/excerpt-retry-fail') return Promise.resolve(mockResponse('Please verify you are a human to continue.'))
+      return Promise.resolve(mockResponse('', { status: 404 }))
+    })
+
+    await fetchAllFeeds()
+
+    const { getDb } = await import('./db.js')
+    const row = getDb().prepare('SELECT full_text, full_text_is_excerpt, retry_count, last_error FROM articles WHERE url = ?').get('https://example.com/excerpt-retry-fail') as { full_text: string; full_text_is_excerpt: number; retry_count: number; last_error: string | null }
+    // Stored excerpt is preserved rather than wiped out by the failed retry
+    expect(row.full_text).toBe('Short RSS teaser sentence stored earlier as a fallback.')
+    expect(row.full_text_is_excerpt).toBe(1)
+    expect(row.last_error).toBeNull()
+    // Still needs another attempt later — counted like a failed retry for backoff purposes
+    expect(row.retry_count).toBe(1)
+  })
 })

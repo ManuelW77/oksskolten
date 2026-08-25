@@ -112,8 +112,8 @@ export async function fetchArticleContent(
     requiresJsChallenge?: boolean
     /** CSS Bridge listing-page excerpt, used as fullText fallback */
     listingExcerpt?: string
-    /** Existing article data for retry (skips fetch if full_text present) */
-    existingArticle?: { full_text: string | null; og_image: string | null; lang: string | null }
+    /** Existing article data for retry (skips fetch if full_text present and not excerpt-only) */
+    existingArticle?: { full_text: string | null; full_text_is_excerpt?: number; og_image: string | null; lang: string | null }
   },
 ): Promise<FetchedContent> {
   let fullText: string | null = null
@@ -125,14 +125,17 @@ export async function fetchArticleContent(
   let title: string | null = null
 
   const existing = options?.existingArticle
+  // An excerpt-fallback article never got genuine page extraction, so a retry
+  // must attempt a real fetch again rather than short-circuiting on the stored text.
+  const existingExcerpt = existing?.full_text_is_excerpt ? existing.full_text : null
 
-  // Step 1: Fetch full text (skip if retry article already has content)
+  // Step 1: Fetch full text (skip if retry article already has real content)
   // For anchor-link articles (URL has # fragment), the page is shared across
   // multiple items, so page fetch would return irrelevant content. Use RSS
   // inline content (content:encoded) directly if available.
   const isAnchorLink = url.includes('#')
 
-  if (existing?.full_text) {
+  if (existing?.full_text && !existingExcerpt) {
     fullText = existing.full_text
     ogImage = existing.og_image
   } else if (isAnchorLink && options?.listingExcerpt) {
@@ -150,22 +153,25 @@ export async function fetchArticleContent(
     }
   }
 
-  // Fallback: use RSS inline content when page fetch failed, returned bot-block page,
-  // or extracted text is too short (e.g. SPA sites where content is in display:none for SEO).
-  // This is the last resort after fetchFullText and its internal FlareSolverr retry
-  // (which also uses MIN_EXTRACTED_LENGTH) have both failed to produce enough content.
-  if (options?.listingExcerpt) {
+  // Fallback: use RSS inline content (new articles) or the previously-stored
+  // excerpt-fallback text (retry of an excerpt-only article) when page fetch
+  // failed, returned a bot-block page, or extracted text is too short (e.g.
+  // SPA sites where content is in display:none for SEO). This is the last
+  // resort after fetchFullText and its internal FlareSolverr retry (which
+  // also uses MIN_EXTRACTED_LENGTH) have both failed to produce enough content.
+  if (options?.listingExcerpt || existingExcerpt) {
     const extractedLen = fullText?.replace(/\s+/g, ' ').trim().length ?? 0
     const shouldFallback = !fullText || isBotBlockPage(fullText) || extractedLen < MIN_EXTRACTED_LENGTH
     if (shouldFallback) {
-      const md = convertHtmlToMarkdown(options.listingExcerpt)
-      const mdLen = md.replace(/\s+/g, ' ').trim().length
-      // Only use RSS content if it's more substantial than what we extracted
-      if (mdLen > extractedLen) {
-        log.info({ url, extractedLen, rssLen: mdLen }, 'using RSS feed content as fallback')
-        fullText = md
+      const fallbackText = options?.listingExcerpt ? convertHtmlToMarkdown(options.listingExcerpt) : existingExcerpt!
+      const fallbackLen = fallbackText.replace(/\s+/g, ' ').trim().length
+      // Only use the fallback if it's more substantial than what we extracted
+      if (fallbackLen > extractedLen) {
+        log.info({ url, extractedLen, fallbackLen }, 'using RSS/stored excerpt as fallback')
+        fullText = fallbackText
         isExcerptFallback = true
-        excerpt = markdownToExcerpt(md)
+        excerpt = markdownToExcerpt(fallbackText)
+        ogImage = ogImage ?? existing?.og_image ?? null
         lastError = null
       }
     }
@@ -201,7 +207,7 @@ interface RetryArticle {
 
 type ArticleTask = NewArticle | RetryArticle
 
-/** Returns true if the retry article still has an error after processing. */
+/** Returns true if the retry article still needs another retry attempt (error, or still excerpt-only) after processing. */
 async function processArticle(task: ArticleTask): Promise<boolean> {
   const articleUrl = task.kind === 'new' ? task.url : task.article.url
 
@@ -250,7 +256,7 @@ async function processArticle(task: ArticleTask): Promise<boolean> {
       last_error: content.lastError,
     })
   }
-  return !!content.lastError
+  return !!content.lastError || content.isExcerptFallback
 }
 
 // --- Single feed fetch ---

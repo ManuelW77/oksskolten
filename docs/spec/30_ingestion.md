@@ -133,6 +133,8 @@ This addresses SPA sites where even FlareSolverr returns rendered HTML but `preC
 
 This prevents the AI from fabricating plausible-sounding details to fill out a summary when there isn't enough source text to work with.
 
+**Retrying Excerpt-Fallback Articles**: `full_text_is_excerpt = 1` also makes an article eligible for `getRetryArticles()` regardless of `last_error` — otherwise a bot-protected article would keep its RSS teaser forever, since it has no `last_error` (the fallback "succeeded") and a non-`NULL` `full_text` (so it never matched the plain error-retry condition either). On retry, `fetchArticleContent` ignores the stored excerpt as a "genuine" result and attempts a real fetch (including the FlareSolverr quality gate) again; the stored excerpt is kept as a floor so a still-blocked site doesn't regress to less content than before. `processArticle` treats "still excerpt-only after retry" the same as a fetch error for `retry_count`/backoff purposes, so a permanently bot-protected article eventually stops being retried once `RETRY_MAX_ATTEMPTS` is reached.
+
 ### Full-Text Retrieval and Markdown Conversion Pipeline
 
 End-to-end flow from article URL to Markdown text. A multi-stage pipeline combining HTML cleaning (defuddle-based) and Readability that removes noise such as ads, navigation, and tracking attributes before converting to Markdown. Runs entirely locally with no external API dependencies.

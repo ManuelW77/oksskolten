@@ -539,8 +539,7 @@ export function getRetryArticles(
 ): Article[] {
   return getDb().prepare(`
     SELECT * FROM active_articles
-    WHERE last_error IS NOT NULL
-      AND full_text IS NULL
+    WHERE ((last_error IS NOT NULL AND full_text IS NULL) OR full_text_is_excerpt = 1)
       AND retry_count < :max_attempts
       AND (
         last_retry_at IS NULL
@@ -570,7 +569,7 @@ export function getRetryStats(maxAttempts = RETRY_MAX_ATTEMPTS): RetryStats {
       THEN 1 ELSE 0 END) AS backoff_waiting,
       SUM(CASE WHEN retry_count >= :max_attempts THEN 1 ELSE 0 END) AS exceeded
     FROM active_articles
-    WHERE last_error IS NOT NULL AND full_text IS NULL
+    WHERE (last_error IS NOT NULL AND full_text IS NULL) OR full_text_is_excerpt = 1
   `).get({ max_attempts: maxAttempts }) as { eligible: number | null; backoff_waiting: number | null; exceeded: number | null }
   return {
     eligible: row.eligible ?? 0,

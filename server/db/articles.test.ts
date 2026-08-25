@@ -718,6 +718,15 @@ describe('getRetryArticles', () => {
     expect(results).toHaveLength(0)
   })
 
+  it('includes excerpt-fallback articles even with full_text present and no last_error', () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, { url: 'https://example.com/excerpt-only', full_text: 'short RSS teaser', full_text_is_excerpt: 1 })
+
+    const results = getRetryArticles()
+    expect(results).toHaveLength(1)
+    expect(results[0].url).toBe('https://example.com/excerpt-only')
+  })
+
   it('excludes articles exceeding max retry attempts', () => {
     const feed = seedFeed()
     const id = seedArticle(feed.id, { url: 'https://example.com/maxed', last_error: 'fail' })
