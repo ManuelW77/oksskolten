@@ -1,4 +1,7 @@
 import { Semaphore } from './util.js'
+import { logger } from '../logger.js'
+
+const log = logger.child('flaresolverr')
 
 const FLARESOLVERR_URL = process.env.FLARESOLVERR_URL
 // Default 1 to prevent multiple simultaneous Chromium sessions during batch refresh
@@ -100,7 +103,10 @@ async function doFetch(url: string, options?: FlareSolverrOptions): Promise<Flar
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(65_000),
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      log.warn({ url, httpStatus: res.status }, 'FlareSolverr endpoint returned non-OK response')
+      return null
+    }
     const data = await res.json() as FlareSolverrResponse
     if (data.solution?.status === 200 && data.solution.response) {
       let body = data.solution.response
@@ -114,8 +120,13 @@ async function doFetch(url: string, options?: FlareSolverrOptions): Promise<Flar
         url: data.solution.url,
       }
     }
+    log.warn(
+      { url, solutionStatus: data.solution?.status, solutionUrl: data.solution?.url, hasResponse: !!data.solution?.response },
+      'FlareSolverr did not return a usable solution (still challenged/blocked?)',
+    )
     return null
-  } catch {
+  } catch (err) {
+    log.warn({ url, err: err instanceof Error ? err.message : String(err) }, 'FlareSolverr request failed')
     return null
   }
 }
