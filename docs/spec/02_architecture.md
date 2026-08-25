@@ -28,7 +28,7 @@ graph TD
         end
 
         bridge["RSS Bridge<br/>(Docker, port 80)"]
-        flare["FlareSolverr<br/>(Docker, port 8191)"]
+        flare["Byparr<br/>(Docker, port 8191, FlareSolverr API)"]
         tunnel["cloudflared<br/>(Cloudflare Tunnel)"]
     end
 

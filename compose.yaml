@@ -91,11 +91,17 @@ services:
     networks:
       - internal
 
+  # Byparr speaks the same /v1 API as FlareSolverr (drop-in, no app code
+  # changes needed) but drives Camoufox instead of plain Chromium, which
+  # handles fingerprint-based anti-bot systems (e.g. DataDome) noticeably
+  # better than FlareSolverr's default Chromium — FlareSolverr was built
+  # primarily for Cloudflare's simpler JS challenges. Still not a guarantee
+  # against enterprise-tier DataDome, but our lvz.de test showed FlareSolverr
+  # never resolving the device-check interstitial at all, so it's the
+  # better default.
   flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
+    image: ghcr.io/thephaseless/byparr:latest
     restart: unless-stopped
-    environment:
-      LOG_LEVEL: info
     ports:
       - "8191:8191"
     networks:

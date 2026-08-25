@@ -52,7 +52,7 @@ graph LR
         cloudflared["cloudflared<br/>Cloudflare Tunnel"]
         app["oksskolten<br/>Node.js 22 :3000<br/>API + SPA + Cron"]
         bridge["rss-bridge<br/>:80"]
-        flare["FlareSolverr<br/>:8191<br/>Headless Browser"]
+        flare["Byparr<br/>:8191<br/>Camoufox, FlareSolverr API"]
         sqlite[("SQLite<br/>/data/rss.db")]
         meili["Meilisearch<br/>:7700"]
 
@@ -83,10 +83,10 @@ All containers are connected via an `internal` bridge network. No ports are expo
 | `JWT_SECRET` | JWT signing secret | | Auto-generated on first startup and persisted in DB if not set |
 | `PORT` | Server port | | Default `3000` |
 | `RSS_BRIDGE_URL` | RSS Bridge URL | | e.g. `http://rss-bridge:80`. Bridge feature disabled if not set |
-| `FLARESOLVERR_URL` | FlareSolverr URL | | e.g. `http://flaresolverr:8191`. Bot auth bypass disabled if not set |
+| `FLARESOLVERR_URL` | FlareSolverr-API-compatible bot-bypass URL | | e.g. `http://flaresolverr:8191`. Bot auth bypass disabled if not set. `compose.yaml` runs [Byparr](https://github.com/ThePhaseless/Byparr) (Camoufox-based) behind this service name rather than upstream FlareSolverr — same `/v1` API, but noticeably better against fingerprint-based anti-bot systems like DataDome |
 | `AUTH_DISABLED` | `1` to skip auth | | Only effective when `NODE_ENV=development` |
-| `FLARESOLVERR_CONCURRENCY` | Max concurrent FlareSolverr requests | | Default `1` |
-| `FLARESOLVERR_MAX_TIMEOUT` | Per-request Chromium timeout (ms) | | Default `30000` |
+| `FLARESOLVERR_CONCURRENCY` | Max concurrent bot-bypass requests | | Default `1` |
+| `FLARESOLVERR_MAX_TIMEOUT` | Per-request Chromium/Camoufox timeout (ms) | | Default `30000` |
 | `FETCH_CONCURRENCY` | Article fetch concurrency (semaphore) | | Default `5` |
 | `PARSE_MAX_THREADS` | DOM parsing Worker Thread count (piscina) | | Default `2` |
 | `CRON_SCHEDULE` | Feed fetch cron expression | | Default `*/5 * * * *` (every 5 min) |
